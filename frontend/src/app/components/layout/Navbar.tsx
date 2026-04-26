@@ -1,0 +1,119 @@
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router';
+import { Search, Film, Bell, ChevronDown, Ticket } from 'lucide-react';
+
+const AVATAR_URL = "https://images.unsplash.com/photo-1764384700065-304c92b11e9c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=80";
+
+export const Navbar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchVal, setSearchVal] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const navLinks = [
+    { label: 'Trang chủ', path: '/home' },
+    { label: 'Lịch chiếu', path: '/showtime' },
+    { label: 'Khuyến mãi', path: '#' },
+  ];
+
+  return (
+    <nav className="h-16 bg-[#0D0D0D] border-b border-[#2A2A2A] flex items-center justify-between px-8 flex-shrink-0 z-50">
+      {/* Logo */}
+      <div
+        className="flex items-center gap-2 cursor-pointer select-none"
+        onClick={() => navigate('/home')}
+      >
+        <div className="w-8 h-8 bg-[#E50914] rounded-lg flex items-center justify-center shadow-lg shadow-red-900/50">
+          <Film className="w-4 h-4 text-white" />
+        </div>
+        <span className="text-white text-lg font-black tracking-widest">CINEMOON</span>
+      </div>
+
+      {/* Nav links */}
+      <div className="flex items-center gap-1">
+        {navLinks.map((item) => (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path)}
+            className={`px-4 py-2 rounded-lg text-sm transition-all ${
+              location.pathname === item.path
+                ? 'text-[#E50914] bg-[#E50914]/10'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="flex items-center bg-[#1C1C1C] border border-[#2A2A2A] rounded-full px-4 py-2 gap-2 w-64 focus-within:border-[#E50914]/50 transition-colors">
+        <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
+        <input
+          type="text"
+          placeholder="Tìm kiếm phim..."
+          value={searchVal}
+          onChange={(e) => setSearchVal(e.target.value)}
+          className="bg-transparent text-sm text-gray-300 outline-none w-full placeholder-gray-600"
+        />
+      </div>
+
+      {/* Right section */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate('/checkout')}
+          className="flex items-center gap-2 bg-[#E50914] hover:bg-[#C40812] text-white text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          <Ticket className="w-4 h-4" />
+          Đặt vé
+        </button>
+
+        <button className="relative p-2 hover:bg-white/5 rounded-lg transition-colors">
+          <Bell className="w-5 h-5 text-gray-400" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#E50914] rounded-full"></span>
+        </button>
+
+        {/* User dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="flex items-center gap-2 p-1 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <img
+              src={AVATAR_URL}
+              alt="User"
+              className="w-8 h-8 rounded-full object-cover border-2 border-[#E50914]"
+            />
+            <ChevronDown className="w-4 h-4 text-gray-400" />
+          </button>
+          {showDropdown && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl shadow-2xl overflow-hidden z-50">
+              <div className="p-3 border-b border-[#2A2A2A]">
+                <p className="text-white text-sm font-medium">Nguyễn Văn An</p>
+                <p className="text-gray-500 text-xs">an.nguyen@email.com</p>
+              </div>
+              <button
+                onClick={() => { navigate('/profile'); setShowDropdown(false); }}
+                className="w-full text-left px-4 py-2.5 text-gray-300 text-sm hover:bg-white/5 hover:text-white transition-colors"
+              >
+                Hồ sơ cá nhân
+              </button>
+              <button
+                onClick={() => { navigate('/admin'); setShowDropdown(false); }}
+                className="w-full text-left px-4 py-2.5 text-gray-300 text-sm hover:bg-white/5 hover:text-white transition-colors"
+              >
+                Quản trị viên
+              </button>
+              <button
+                onClick={() => { navigate('/'); setShowDropdown(false); }}
+                className="w-full text-left px-4 py-2.5 text-[#E50914] text-sm hover:bg-[#E50914]/10 transition-colors"
+              >
+                Đăng xuất
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+};
