@@ -1,11 +1,5 @@
 # Cinemoon: Movie Booking System with Oracle Concurrency Demo
 
-**Course:** Database Management Systems (IS210)  
-**Institution:** University of Information Technology (UIT)  
-**Academic Year:** Fall 2025–2026
-
----
-
 ## Project Overview
 
 **Cinemoon** is a full-stack movie ticket booking web application designed to demonstrate:
