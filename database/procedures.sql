@@ -1,4 +1,6 @@
--- 1. sp tao khach hang
+
+
+-- 1. SP_TAO_KHACH_HANG
 CREATE OR REPLACE PROCEDURE SP_TAO_KHACH_HANG (
     p_TenDangNhap IN VARCHAR2,
     p_MatKhau IN VARCHAR2,     -- Lưu ý: Node.js sẽ băm mật khẩu (bcrypt) trước khi truyền vào đây
@@ -35,9 +37,9 @@ BEGIN
     END IF;
 
     -- 2. SINH MÃ TỰ ĐỘNG
-    -- Dùng Timestamp để sinh mã ngẫu nhiên, không lo trùng lặp
-    v_MaTK := 'TK' || TO_CHAR(SYSTIMESTAMP, 'YYMMDDHH24MISSFF3');
-    v_MaKH := 'KH' || TO_CHAR(SYSTIMESTAMP, 'YYMMDDHH24MISSFF3');
+    -- Dùng Sequence
+    v_MaTK := 'TK' || LPAD(SEQ_TK.NEXTVAL, 6, '0');
+    v_MaKH := 'KH' || LPAD(SEQ_KH.NEXTVAL, 6, '0');
 
     -- 3. INSERT VÀO BẢNG TAI_KHOAN
     INSERT INTO TAI_KHOAN (MATK, TENDANGNHAP, MATKHAU, QUYENTRUYCAP, TRANGTHAITAIKHOAN, THOIGIANTAO)
@@ -84,7 +86,7 @@ BEGIN
         RETURN;
     END IF;
 
-    v_MaPhim := 'PH' || TO_CHAR(SYSDATE,'YYYYMMDDHH24MISS') || TRUNC(DBMS_RANDOM.VALUE(10,99));
+    v_MaPhim := 'PH' || LPAD(SEQ_PHIM.NEXTVAL, 4, '0');
 
     INSERT INTO PHIM (MAPHIM, TENPHIM, THOILUONG, DAODIEN, GIOIHANTUOI, TRANGTHAI)
     VALUES (v_MaPhim, p_TenPhim, p_ThoiLuong, p_DaoDien, p_GioiHanTuoi, 'Upcoming');
@@ -143,7 +145,7 @@ BEGIN
         RETURN;
     END IF;
 
-    v_MaSuat := 'SC' || TO_CHAR(SYSDATE,'YYYYMMDDHH24MISS') || TRUNC(DBMS_RANDOM.VALUE(10,99));
+    v_MaSuat := 'SC' || LPAD(SEQ_SC.NEXTVAL, 6, '0');
 
     INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
     VALUES (v_MaSuat, p_MaPhim, p_MaPhong, p_NgayChieu, p_GioBatDau, v_GioKetThuc, 'Upcoming');
@@ -264,7 +266,7 @@ BEGIN
         RETURN;
     END IF;
 
-    v_MaGD := 'GD' || TO_CHAR(SYSDATE,'YYYYMMDDHH24MISS') || TRUNC(DBMS_RANDOM.VALUE(10,99));
+    v_MaGD := 'GD' || LPAD(SEQ_GD.NEXTVAL, 8, '0');
 
     INSERT INTO GIAO_DICH (MAGD, MAKH, MAKHUYENMAI, THOIGIANTAO, TONGTIEN, TRANGTHAIGD)
     VALUES (v_MaGD, p_MaKH, NULL, CURRENT_TIMESTAMP, 0, 'Pending');
@@ -469,8 +471,7 @@ BEGIN
     END IF;
 
     -- [Bước 4] Ghi nhận thanh toán và cập nhật trạng thái
-    -- "TT" (2 ký tự) + YYMMDDHH24MISS (14 ký tự) + 4 số ngẫu nhiên = 20 ký tự
-    v_MaThanhToan := 'TT' || TO_CHAR(SYSTIMESTAMP, 'YYMMDDHH24MISS') || TRUNC(DBMS_RANDOM.VALUE(1000, 9999));
+    v_MaThanhToan := 'TT' || LPAD(SEQ_TT.NEXTVAL, 8, '0');
     
     INSERT INTO THANH_TOAN (MATHANHTOAN, MAGD, PHUONGTHUC, SOTIEN, TRANGTHAITT)
     VALUES (v_MaThanhToan, p_MaGD, p_PhuongThuc, p_SoTien, 'Success');
@@ -511,7 +512,6 @@ AS
     v_MaVe VARCHAR2(20);
     v_Count NUMBER := 0;
 BEGIN
-    -- ĐÃ SỬA: Dùng Subquery và Function để lấy chính xác 1 dòng dữ liệu
     FOR rec IN (
         SELECT d.MASUAT, d.MAGHE, 
                (SELECT MAQUYDINH FROM QUY_DINH_GIA WHERE MALOAIGHE = gh.MALOAIGHE AND MALOAIKHACH = kh.MALOAIKHACH AND ROWNUM = 1) AS MAQUYDINH,
@@ -524,7 +524,7 @@ BEGIN
     ) 
     LOOP
         v_Count := v_Count + 1;
-        v_MaVe := 'VE' || TO_CHAR(SYSTIMESTAMP, 'YYMMDDHH24MISS') || LPAD(v_Count, 4, '0');
+        v_MaVe := 'VE' || LPAD(SEQ_VE.NEXTVAL, 8, '0');
 
         INSERT INTO VE (MAVE, MAGD, MASUAT, MAGHE, MAQUYDINH, GIAVETHUCTE, TRANGTHAIVE)
         VALUES (v_MaVe, p_MaGD, rec.MASUAT, rec.MAGHE, rec.MAQUYDINH, rec.GIAVETHUCTE, 'Issued');
