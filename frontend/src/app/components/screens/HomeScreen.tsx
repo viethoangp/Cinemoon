@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Star, Clock, Play, X, ChevronRight, TrendingUp, Flame, Award, Calendar } from 'lucide-react';
 import { MOVIES, Movie, useApp } from '../../context/AppContext';
+import { SkeletonCard } from '../SkeletonCard';
 
 const HERO_URL = "https://images.unsplash.com/photo-1759230766134-e3ff1c27d20e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
@@ -164,10 +165,18 @@ const MovieCard = ({ movie, onClick }: { movie: Movie; onClick: () => void }) =>
 
 export const HomeScreen = () => {
   const navigate = useNavigate();
-  const { setSelectedMovie } = useApp();
+  const { setSelectedMovie, showingMovies, upcomingMovies, loadingMovies, errorMovies, fetchMovies } = useApp();
   const [modalMovie, setModalMovie] = useState<Movie | null>(null);
 
-  const featuredMovie = MOVIES[4]; // Rừng Thiêng as featured
+  // Fetch movies on component mount
+  useEffect(() => {
+    if (showingMovies.length === 0 && !loadingMovies) {
+      fetchMovies();
+    }
+  }, []);
+
+  // Use first showing movie as featured, fallback to mock data
+  const featuredMovie = showingMovies.length > 0 ? showingMovies[0] : MOVIES[4];
 
   const handleCardClick = (movie: Movie) => setModalMovie(movie);
   const handleBook = () => {
@@ -234,7 +243,7 @@ export const HomeScreen = () => {
 
         {/* Right side mini-posters */}
         <div className="absolute right-12 top-1/2 -translate-y-1/2 flex gap-3 opacity-60">
-          {MOVIES.slice(0, 3).map((m, i) => (
+          {(showingMovies.length > 0 ? showingMovies : MOVIES).slice(0, 3).map((m, i) => (
             <div key={m.id} className="w-24 h-36 rounded-lg overflow-hidden border border-white/10" style={{ opacity: 1 - i * 0.25 }}>
               <img src={m.image} alt={m.title} className="w-full h-full object-cover" />
             </div>
@@ -276,6 +285,19 @@ export const HomeScreen = () => {
           </div>
         </div>
 
+        {/* Error banner */}
+        {errorMovies && (
+          <div className="mb-6 bg-[#E50914]/20 border border-[#E50914] rounded-lg p-4 flex items-center justify-between">
+            <span className="text-red-300 text-sm">⚠️ {errorMovies}</span>
+            <button
+              onClick={() => fetchMovies()}
+              className="text-[#E50914] hover:text-white text-sm font-medium transition-colors"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
         {/* Section title */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white" style={{ fontSize: '1.25rem', fontWeight: 700 }}>
@@ -286,12 +308,26 @@ export const HomeScreen = () => {
           </button>
         </div>
 
-        {/* Movie Grid */}
-        <div className="grid grid-cols-6 gap-4">
-          {MOVIES.map((movie) => (
-            <MovieCard key={movie.id} movie={movie} onClick={() => handleCardClick(movie)} />
-          ))}
-        </div>
+        {/* Movie Grid - Loading state */}
+        {loadingMovies ? (
+          <div className="grid grid-cols-6 gap-4 mb-10">
+            {Array(6).fill(0).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-6 gap-4 mb-10">
+            {showingMovies.length > 0 ? (
+              showingMovies.map((movie) => (
+                <MovieCard key={movie.id} movie={movie} onClick={() => handleCardClick(movie)} />
+              ))
+            ) : (
+              <div className="col-span-6 text-center text-gray-500 py-8">
+                Không có phim đang chiếu
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Coming soon section */}
         <div className="mt-10">
@@ -303,22 +339,37 @@ export const HomeScreen = () => {
               Xem thêm <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            {MOVIES.slice(0, 3).map((movie) => (
-              <div key={`cs-${movie.id}`} className="flex gap-4 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-4 hover:border-[#333] transition-colors">
-                <img src={movie.image} alt={movie.title} className="w-16 h-24 object-cover rounded-lg flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-white text-sm font-semibold mb-1 truncate">{movie.title}</h4>
-                  <p className="text-gray-500 text-xs mb-2">{movie.genre}</p>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Star className="w-3 h-3 text-[#F5C518] fill-[#F5C518]" />
-                    <span className="text-gray-400 text-xs">{movie.score}</span>
+          
+          {loadingMovies ? (
+            <div className="grid grid-cols-3 gap-4">
+              {Array(3).fill(0).map((_, i) => (
+                <div key={i} className="h-32 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              {upcomingMovies.length > 0 ? (
+                upcomingMovies.slice(0, 3).map((movie) => (
+                  <div key={`cs-${movie.id}`} className="flex gap-4 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-4 hover:border-[#333] transition-colors">
+                    <img src={movie.image} alt={movie.title} className="w-16 h-24 object-cover rounded-lg flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-white text-sm font-semibold mb-1 truncate">{movie.title}</h4>
+                      <p className="text-gray-500 text-xs mb-2">{movie.genre}</p>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Star className="w-3 h-3 text-[#F5C518] fill-[#F5C518]" />
+                        <span className="text-gray-400 text-xs">{movie.score}</span>
+                      </div>
+                      <span className="text-xs text-gray-500 bg-[#252525] px-2 py-1 rounded-md">Khởi chiếu 01/05</span>
+                    </div>
                   </div>
-                  <span className="text-xs text-gray-500 bg-[#252525] px-2 py-1 rounded-md">Khởi chiếu 01/05</span>
+                ))
+              ) : (
+                <div className="col-span-3 text-center text-gray-500 py-8">
+                  Không có phim sắp ra mắt
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

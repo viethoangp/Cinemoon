@@ -1,18 +1,54 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Eye, EyeOff, Film, Star, Play } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 const HERO_URL = "https://images.unsplash.com/photo-1759230766134-e3ff1c27d20e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
 
 export const LoginScreen = () => {
   const navigate = useNavigate();
+  const { login, isLoading, error: authError } = useApp();
   const [showPassword, setShowPassword] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' });
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/home');
+    setLocalError(null);
+    
+    // Validation
+    if (!form.username.trim()) {
+      setLocalError('Vui lòng nhập tên đăng nhập');
+      return;
+    }
+    if (!form.password.trim()) {
+      setLocalError('Vui lòng nhập mật khẩu');
+      return;
+    }
+    
+    if (isRegister) {
+      // Register validation
+      if (!form.email.trim()) {
+        setLocalError('Vui lòng nhập email');
+        return;
+      }
+      if (form.password !== form.confirm) {
+        setLocalError('Mật khẩu xác nhận không khớp');
+        return;
+      }
+      // TODO: Implement register API call
+      setLocalError('Chức năng đăng ký sẽ được cập nhật trong phase tới');
+      return;
+    }
+    
+    try {
+      await login(form.username, form.password);
+      // Navigate to home on successful login
+      navigate('/home');
+    } catch (err) {
+      // Error is already set in AppContext
+    }
   };
 
   return (
@@ -115,6 +151,13 @@ export const LoginScreen = () => {
               ? 'Tham gia Cinemoon để trải nghiệm điện ảnh đỉnh cao'
               : 'Đăng nhập để đặt vé và quản lý tài khoản của bạn'}
           </p>
+          
+          {/* Error message */}
+          {(localError || authError) && (
+            <div className="mb-6 p-4 bg-[#E50914]/20 border border-[#E50914] rounded-lg">
+              <p className="text-[#ff6b6b] text-sm">{localError || authError}</p>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             {/* Username */}
@@ -194,9 +237,10 @@ export const LoginScreen = () => {
             {/* Submit button */}
             <button
               type="submit"
-              className="w-full bg-[#E50914] hover:bg-[#C40812] text-white py-4 rounded-xl font-semibold text-base transition-all shadow-lg shadow-red-900/30 hover:shadow-red-900/50 active:scale-[0.98] mt-2"
+              disabled={isLoading}
+              className="w-full bg-[#E50914] hover:bg-[#C40812] disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-4 rounded-xl font-semibold text-base transition-all shadow-lg shadow-red-900/30 hover:shadow-red-900/50 active:scale-[0.98] mt-2"
             >
-              {isRegister ? 'Tạo tài khoản' : 'Đăng Nhập'}
+              {isLoading ? 'Đang xử lý...' : isRegister ? 'Tạo tài khoản' : 'Đăng Nhập'}
             </button>
 
             {/* Divider */}

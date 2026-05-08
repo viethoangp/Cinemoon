@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { catalogAPI, authAPI, ApiMovie, ApiShowtime, ApiCinema } from '../../services/api';
+import { transformMoviesFromAPI, filterMoviesByStatus, mapCinemaData } from '../../utils/transformers';
+import { saveToken, getToken, saveUser, getUser, clearToken, clearUser, User as TokenUser, logout as tokenLogout } from '../../utils/token';
 
 export interface Movie {
   id: number;
@@ -16,8 +19,11 @@ export interface Movie {
 }
 
 interface AppContextType {
+  // Movie selection
   selectedMovie: Movie | null;
   setSelectedMovie: (movie: Movie | null) => void;
+  
+  // Booking selection
   selectedSeats: string[];
   setSelectedSeats: (seats: string[]) => void;
   selectedShowtime: string;
@@ -26,6 +32,36 @@ interface AppContextType {
   setSelectedDate: (date: string) => void;
   selectedCinema: string;
   setSelectedCinema: (cinema: string) => void;
+  selectedSuatChieu: ApiShowtime | null;
+  setSelectedSuatChieu: (suatChieu: ApiShowtime | null) => void;
+  
+  // Movie API data
+  allMovies: Movie[];
+  showingMovies: Movie[];
+  upcomingMovies: Movie[];
+  loadingMovies: boolean;
+  errorMovies: string | null;
+  fetchMovies: () => Promise<void>;
+  
+  // Showtime API data
+  showtimes: ApiShowtime[];
+  loadingShowtimes: boolean;
+  errorShowtimes: string | null;
+  fetchShowtimes: (maphim?: string, ngaychieu?: string) => Promise<void>;
+  
+  // Cinema API data
+  cinemas: { id: string; name: string; address: string }[];
+  loadingCinemas: boolean;
+  errorCinemas: string | null;
+  fetchCinemas: () => Promise<void>;
+  
+  // Auth state
+  user: TokenUser | null;
+  isLoading: boolean;
+  error: string | null;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
+  isAuthenticated: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -129,6 +165,136 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [selectedShowtime, setSelectedShowtime] = useState('19:30');
   const [selectedDate, setSelectedDate] = useState('2025-04-26');
   const [selectedCinema, setSelectedCinema] = useState('Cinemoon Hà Nội - Mipec');
+  const [selectedSuatChieu, setSelectedSuatChieu] = useState<ApiShowtime | null>(null);
+
+  // Movie API states
+  const [allMovies, setAllMovies] = useState<Movie[]>([]);
+  const [showingMovies, setShowingMovies] = useState<Movie[]>([]);
+  const [upcomingMovies, setUpcomingMovies] = useState<Movie[]>([]);
+  const [loadingMovies, setLoadingMovies] = useState(false);
+  const [errorMovies, setErrorMovies] = useState<string | null>(null);
+  
+  // Showtime API states
+  const [showtimes, setShowtimes] = useState<ApiShowtime[]>([]);
+  const [loadingShowtimes, setLoadingShowtimes] = useState(false);
+  const [errorShowtimes, setErrorShowtimes] = useState<string | null>(null);
+  
+  // Cinema API states
+  const [cinemas, setCinemas] = useState<{ id: string; name: string; address: string }[]>([]);
+  const [loadingCinemas, setLoadingCinemas] = useState(false);
+  const [errorCinemas, setErrorCinemas] = useState<string | null>(null);
+  
+  // Store raw API data for status filtering
+  const [apiMoviesData, setApiMoviesData] = useState<ApiMovie[]>([]);
+  
+  // Auth states
+  const [user, setUser] = useState<TokenUser | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Initialize user from localStorage on mount
+  useEffect(() => {
+    const storedUser = getUser();
+    const token = getToken();
+    if (storedUser && token) {
+      setUser(storedUser);
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const fetchMovies = async () => {
+    try {
+      setLoadingMovies(true);
+      setErrorMovies(null);
+
+      const apiMovies = await catalogAPI.getMovies();
+      setApiMoviesData(apiMovies);
+
+      // Transform API data to frontend format
+      const transformedMovies = transformMoviesFromAPI(apiMovies);
+      setAllMovies(transformedMovies);
+
+      // Filter by status
+      const showing = filterMoviesByStatus(transformedMovies, 'Showing', apiMovies);
+      const upcoming = filterMoviesByStatus(transformedMovies, 'Upcoming', apiMovies);
+
+      setShowingMovies(showing);
+      setUpcomingMovies(upcoming);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể tải danh sách phim';
+      setErrorMovies(message);
+      console.error('[AppContext fetchMovies]', err);
+    } finally {
+      setLoadingMovies(false);
+    }
+  };
+
+  const fetchShowtimes = async (maphim?: string, ngaychieu?: string) => {
+    try {
+      setLoadingShowtimes(true);
+      setErrorShowtimes(null);
+
+      const apiShowtimes = await catalogAPI.getShowtimes(maphim, ngaychieu);
+      setShowtimes(apiShowtimes);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể tải danh sách suất chiếu';
+      setErrorShowtimes(message);
+      console.error('[AppContext fetchShowtimes]', err);
+    } finally {
+      setLoadingShowtimes(false);
+    }
+  };
+
+  const fetchCinemas = async () => {
+    try {
+      setLoadingCinemas(true);
+      setErrorCinemas(null);
+
+      const apiCinemas = await catalogAPI.getCinemas();
+      const transformedCinemas = apiCinemas.map(mapCinemaData);
+      setCinemas(transformedCinemas);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể tải danh sách rạp';
+      setErrorCinemas(message);
+      console.error('[AppContext fetchCinemas]', err);
+    } finally {
+      setLoadingCinemas(false);
+    }
+  };
+  
+  const login = async (username: string, password: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await authAPI.login(username, password);
+      
+      // response.data should be { token, user }
+      if (response.token && response.user) {
+        saveToken(response.token);
+        saveUser(response.user);
+        setUser(response.user);
+        setIsAuthenticated(true);
+      } else {
+        throw new Error('Phản hồi từ server không hợp lệ');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Lỗi đăng nhập';
+      setError(message);
+      console.error('[AppContext login]', err);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleLogout = () => {
+    tokenLogout();
+    setUser(null);
+    setIsAuthenticated(false);
+    setError(null);
+  };
 
   return (
     <AppContext.Provider value={{
@@ -137,6 +303,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       selectedShowtime, setSelectedShowtime,
       selectedDate, setSelectedDate,
       selectedCinema, setSelectedCinema,
+      selectedSuatChieu, setSelectedSuatChieu,
+      allMovies,
+      showingMovies,
+      upcomingMovies,
+      loadingMovies,
+      errorMovies,
+      fetchMovies,
+      showtimes,
+      loadingShowtimes,
+      errorShowtimes,
+      fetchShowtimes,
+      cinemas,
+      loadingCinemas,
+      errorCinemas,
+      fetchCinemas,
+      user,
+      isLoading,
+      error,
+      login,
+      logout: handleLogout,
+      isAuthenticated,
     }}>
       {children}
     </AppContext.Provider>
