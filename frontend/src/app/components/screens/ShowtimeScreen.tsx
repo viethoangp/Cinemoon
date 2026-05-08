@@ -14,11 +14,12 @@ const getDates = () => {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() + i);
+    const localIso = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     return {
       dayLabel: i === 0 ? 'Hôm nay' : i === 1 ? 'Ngày mai' : days[d.getDay()],
       date: d.getDate(),
       month: months[d.getMonth()],
-      iso: d.toISOString().split('T')[0],
+      iso: localIso,
     };
   });
 };
@@ -99,10 +100,9 @@ export const ShowtimeScreen = () => {
     }
   }, [cinemas]);
 
-  // Fetch showtimes when date changes
-  useEffect(() => {
-    fetchShowtimes(undefined, activeDate);
-  }, [activeDate]);
+useEffect(() => {
+  fetchShowtimes(undefined, activeDate, activeCinema); 
+}, [activeDate, activeCinema]);
 
   const handleSelectShowtime = (showtime: ApiShowtime) => {
     // Find the movie in allMovies

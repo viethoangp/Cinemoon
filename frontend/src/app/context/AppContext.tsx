@@ -48,7 +48,7 @@ interface AppContextType {
   showtimes: ApiShowtime[];
   loadingShowtimes: boolean;
   errorShowtimes: string | null;
-  fetchShowtimes: (maphim?: string, ngaychieu?: string) => Promise<void>;
+  fetchShowtimes: (maphim?: string, ngaychieu?: string, marap?: string) => Promise<void>;
   
   // Cinema API data
   cinemas: { id: string; name: string; address: string }[];
@@ -237,12 +237,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const fetchShowtimes = async (maphim?: string, ngaychieu?: string) => {
+  const fetchShowtimes = async (maphim?: string, ngaychieu?: string, marap?: string) => {
     try {
       setLoadingShowtimes(true);
       setErrorShowtimes(null);
 
-      const apiShowtimes = await catalogAPI.getShowtimes(maphim, ngaychieu);
+      const apiShowtimes = await catalogAPI.getShowtimes(maphim, ngaychieu, marap);
       setShowtimes(apiShowtimes);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Không thể tải danh sách suất chiếu';

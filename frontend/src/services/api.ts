@@ -121,11 +121,12 @@ export const catalogAPI = {
    * Get showtimes with optional filters
    * GET /catalog/suat-chieu?maphim=PH001&ngaychieu=2025-04-26
    */
-  getShowtimes: async (maphim?: string, ngaychieu?: string): Promise<ApiShowtime[]> => {
+  getShowtimes: async (maphim?: string, ngaychieu?: string, marap?: string): Promise<ApiShowtime[]> => {
     let endpoint = '/catalog/suat-chieu';
     const params = new URLSearchParams();
     if (maphim) params.append('maphim', maphim);
     if (ngaychieu) params.append('ngaychieu', ngaychieu);
+    if (marap) params.append('marap', marap); 
     if (params.toString()) endpoint += `?${params.toString()}`;
     return fetchAPI<ApiShowtime[]>(endpoint);
   },

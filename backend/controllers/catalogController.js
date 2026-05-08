@@ -137,27 +137,30 @@ export const getPhimById = async (req, res) => {
 // ================== SUAT_CHIEU ==================
 export const getSuatChieu = async (req, res) => {
   try {
-    const { maphim, maphong, ngaychieu } = req.query;
+
+    const { maphim, maphong, ngaychieu, marap } = req.query; 
+
     let query = `
       SELECT sc.MASUAT, sc.MAPHIM, sc.MAPHONG, 
              TO_CHAR(sc.NGAYCHIEU, 'YYYY-MM-DD') AS NGAYCHIEU,
              TO_CHAR(sc.GIOBATDAU, 'HH24:MI:SS') AS GIOBATDAU,
              TO_CHAR(sc.GIOKETTHUC, 'HH24:MI:SS') AS GIOKETTHUC,
-             sc.TRANGTHAISUAT, p.TENPHIM
+             sc.TRANGTHAISUAT, p.TENPHIM, pc.MARAP
       FROM SUAT_CHIEU sc
       JOIN PHIM p ON sc.MAPHIM = p.MAPHIM
+      JOIN PHONG_CHIEU pc ON sc.MAPHONG = pc.MAPHONG 
       WHERE 1=1
     `;
     const params = [];
 
-    if (maphim) {
-      query += ' AND sc.MAPHIM = :maphim';
-      params.push(maphim);
+    if (maphim) { query += ' AND sc.MAPHIM = :maphim'; params.push(maphim); }
+    if (maphong) { query += ' AND sc.MAPHONG = :maphong'; params.push(maphong); }
+    
+    if (marap) { 
+      query += ' AND pc.MARAP = :marap'; 
+      params.push(marap); 
     }
-    if (maphong) {
-      query += ' AND sc.MAPHONG = :maphong';
-      params.push(maphong);
-    }
+    
     if (ngaychieu) {
       query += ' AND TRUNC(sc.NGAYCHIEU) = TO_DATE(:ngaychieu, \'YYYY-MM-DD\')';
       params.push(ngaychieu);
