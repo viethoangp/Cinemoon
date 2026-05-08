@@ -60,6 +60,7 @@ export const ShowtimeScreen = () => {
     setSelectedDate,
     setSelectedCinema,
     setSelectedSuatChieu,
+    fetchMovies,
     cinemas,
     loadingCinemas,
     errorCinemas,
@@ -75,6 +76,14 @@ export const ShowtimeScreen = () => {
   const [activeDate, setActiveDate] = useState(dates[0].iso);
   const [activeCinema, setActiveCinema] = useState<string>('RAP001'); // Default to first cinema ID
   const [showCinemaDropdown, setShowCinemaDropdown] = useState(false);
+  const moviesForLookup = allMovies.length > 0 ? allMovies : MOVIES;
+
+  // Ensure movie catalog exists even when entering Showtime directly
+  useEffect(() => {
+    if (allMovies.length === 0) {
+      fetchMovies();
+    }
+  }, [allMovies.length, fetchMovies]);
 
   // Fetch cinemas on mount
   useEffect(() => {
@@ -97,11 +106,7 @@ export const ShowtimeScreen = () => {
 
   const handleSelectShowtime = (showtime: ApiShowtime) => {
     // Find the movie in allMovies
-    const movie = allMovies.find(m => {
-      // We need to match by API movie ID - extract from movie.id
-      // But this is complex, so we'll use the first showing movie as fallback
-      return true; // This will be fixed in actual implementation
-    });
+    const movie = moviesForLookup.find(m => m.maphim === showtime.MAPHIM);
 
     if (movie) {
       setSelectedMovie(movie);
@@ -208,13 +213,8 @@ export const ShowtimeScreen = () => {
           <div className="text-center py-10 text-gray-400">Không có suất chiếu nào trong ngày này</div>
         ) : (
           Object.entries(showtimesByMovie).map(([maphim, movieShowtimes]) => {
-            // Find movie details from allMovies
-            const movie = allMovies.find(m => {
-              // Match by extracting movie ID from the API MAPHIM code
-              // MAPHIM format: "PH001" -> extract 001 -> compare with movie id if it exists
-              // For now, match by index or use first movie as placeholder
-              return true;
-            }) || allMovies[0];
+            // Find movie details from allMovies by matching maphim
+            const movie = moviesForLookup.find(m => m.maphim === maphim);
 
             if (!movie) return null;
 

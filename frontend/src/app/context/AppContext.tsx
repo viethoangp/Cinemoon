@@ -5,6 +5,7 @@ import { saveToken, getToken, saveUser, getUser, clearToken, clearUser, User as 
 
 export interface Movie {
   id: number;
+  maphim: string; // Keep original API ID for matching
   title: string;
   genre: string;
   duration: string;
@@ -75,6 +76,7 @@ export const useApp = () => {
 export const MOVIES: Movie[] = [
   {
     id: 1,
+    maphim: "PHIM001",
     title: "Vũ Trụ Song Song",
     genre: "Khoa học viễn tưởng",
     duration: "148 phút",
@@ -89,6 +91,7 @@ export const MOVIES: Movie[] = [
   },
   {
     id: 2,
+    maphim: "PHIM002",
     title: "Bóng Tối Thành Phố",
     genre: "Hành động / Kinh dị",
     duration: "132 phút",
@@ -103,6 +106,7 @@ export const MOVIES: Movie[] = [
   },
   {
     id: 3,
+    maphim: "PHIM003",
     title: "Bóng Ma Cuối Cùng",
     genre: "Kinh dị / Tâm lý",
     duration: "115 phút",
@@ -117,6 +121,7 @@ export const MOVIES: Movie[] = [
   },
   {
     id: 4,
+    maphim: "PHIM004",
     title: "Tình Yêu Vĩnh Cửu",
     genre: "Tình cảm / Lãng mạn",
     duration: "122 phút",
@@ -131,6 +136,7 @@ export const MOVIES: Movie[] = [
   },
   {
     id: 5,
+    maphim: "PHIM005",
     title: "Rừng Thiêng",
     genre: "Phiêu lưu / Hành động",
     duration: "156 phút",
@@ -145,6 +151,7 @@ export const MOVIES: Movie[] = [
   },
   {
     id: 6,
+    maphim: "PHIM006",
     title: "Ngọn Lửa Báo Thù",
     genre: "Hành động / Tội phạm",
     duration: "138 phút",
@@ -163,7 +170,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(MOVIES[4]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>(['D5', 'D6']);
   const [selectedShowtime, setSelectedShowtime] = useState('19:30');
-  const [selectedDate, setSelectedDate] = useState('2025-04-26');
+  const [selectedDate, setSelectedDate] = useState('2026-05-08');
   const [selectedCinema, setSelectedCinema] = useState('Cinemoon Hà Nội - Mipec');
   const [selectedSuatChieu, setSelectedSuatChieu] = useState<ApiShowtime | null>(null);
 

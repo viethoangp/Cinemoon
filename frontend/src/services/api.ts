@@ -2,7 +2,7 @@
 import { MOCK_PHIM_DATA, MOCK_SUAT_CHIEU_DATA, MOCK_RAP_DATA } from './mockData';
 
 const API_BASE = 'http://localhost:3000/api';
-const USE_MOCK_DATA = true; // Toggle to true for development when database is unavailable
+const USE_MOCK_DATA = false; // Set to true for mock, false for real API from Oracle
 
 // Define response type
 interface ApiResponse<T> {

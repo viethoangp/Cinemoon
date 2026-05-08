@@ -76,6 +76,7 @@ export function transformMovieFromAPI(apiMovie: ApiMovie): Movie {
 
   return {
     id,
+    maphim: apiMovie.MAPHIM, // Keep original API ID for matching
     title: apiMovie.TENPHIM,
     genre: apiMovie.THELOAI,
     duration,
