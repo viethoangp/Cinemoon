@@ -1,3 +1,27 @@
+-- Xoa du lieu tat ca cac bang cu
+BEGIN
+    -- 1. Quét và xóa toàn bộ BẢNG (Kèm theo điều kiện xóa luôn Khóa ngoại)
+    FOR t IN (SELECT table_name FROM user_tables) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP TABLE ' || t.table_name || ' CASCADE CONSTRAINTS';
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('Lỗi khi drop bảng ' || t.table_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+
+    -- 2. Quét và xóa toàn bộ SEQUENCE
+    FOR s IN (SELECT sequence_name FROM user_sequences) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP SEQUENCE ' || s.sequence_name;
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('Lỗi khi drop sequence ' || s.sequence_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+END;
+/
+-- SEQUENCE
 -- Nhóm Quản trị hệ thống
 CREATE SEQUENCE SEQ_THAMSO START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE SEQ_TK START WITH 1 INCREMENT BY 1;

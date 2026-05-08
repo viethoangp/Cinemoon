@@ -3,13 +3,13 @@
 -- 1. SP_TAO_KHACH_HANG
 CREATE OR REPLACE PROCEDURE SP_TAO_KHACH_HANG (
     p_TenDangNhap IN VARCHAR2,
-    p_MatKhau IN VARCHAR2,     -- Lưu ý: Node.js sẽ băm mật khẩu (bcrypt) trước khi truyền vào đây
+    p_MatKhau IN VARCHAR2,     
     p_HoTen IN NVARCHAR2,
     p_NgaySinh IN DATE,
     p_GioiTinh IN NVARCHAR2,
     p_SDT IN VARCHAR2,
     p_Email IN VARCHAR2,
-    p_MaKH OUT VARCHAR2,       -- Trả về mã KH để frontend biết
+    p_MaKH OUT VARCHAR2,       
     p_KetQua OUT NUMBER,
     p_Loi OUT NVARCHAR2
 )
@@ -17,56 +17,44 @@ AS
     v_Count NUMBER;
     v_MaTK VARCHAR2(20);
     v_MaKH VARCHAR2(20);
-    v_MaLoaiKhach VARCHAR2(10) := 'LK01'; -- Giả sử 'LK01' là mã mặc định cho Khách Thường
+    v_MaLoaiKhach VARCHAR2(10) := 'LK001'; 
 BEGIN
-    -- 1. KIỂM TRA TRÙNG LẶP (Validation)
-    -- Kiểm tra Tên đăng nhập (Ràng buộc UNIQUE)
+    -- 1. Kiểm tra Tên đăng nhập
     SELECT COUNT(*) INTO v_Count FROM TAI_KHOAN WHERE TENDANGNHAP = p_TenDangNhap;
     IF v_Count > 0 THEN
-        p_KetQua := 0;
-        p_Loi := 'Tên đăng nhập đã tồn tại. Vui lòng chọn tên khác.';
-        RETURN;
+        p_KetQua := 0; p_Loi := 'Tên đăng nhập đã tồn tại. Vui lòng chọn tên khác.'; RETURN;
     END IF;
 
-    -- Kiểm tra Số điện thoại (Ràng buộc UNIQUE)
+    -- 2. Kiểm tra Số điện thoại
     SELECT COUNT(*) INTO v_Count FROM KHACH_HANG WHERE SDT = p_SDT;
     IF v_Count > 0 THEN
-        p_KetQua := 0;
-        p_Loi := 'Số điện thoại này đã được đăng ký.';
-        RETURN;
+        p_KetQua := 0; p_Loi := 'Số điện thoại này đã được đăng ký.'; RETURN;
     END IF;
 
-    -- 2. SINH MÃ TỰ ĐỘNG
-    -- Dùng Sequence
-    v_MaTK := 'TK' || LPAD(SEQ_TK.NEXTVAL, 6, '0');
+    -- 3. Sinh mã tự động
+    v_MaTK := 'TK' || LPAD(SEQ_TK.NEXTVAL, 3, '0');
     v_MaKH := 'KH' || LPAD(SEQ_KH.NEXTVAL, 6, '0');
 
-    -- 3. INSERT VÀO BẢNG TAI_KHOAN
+    -- 4. Insert vào TAI_KHOAN (Sửa 'HoatDong' thành 'Active')
     INSERT INTO TAI_KHOAN (MATK, TENDANGNHAP, MATKHAU, QUYENTRUYCAP, TRANGTHAITAIKHOAN, THOIGIANTAO)
-    VALUES (v_MaTK, p_TenDangNhap, p_MatKhau, 'Customer', 'HoatDong', SYSTIMESTAMP);
+    VALUES (v_MaTK, p_TenDangNhap, p_MatKhau, 'Customer', 'Active', SYSTIMESTAMP);
 
-    -- 4. INSERT VÀO BẢNG KHACH_HANG
+    -- 5. Insert vào KHACH_HANG
     INSERT INTO KHACH_HANG (MAKH, MATK, MALOAIKHACH, HOTEN, NGAYSINH, GIOITINH, SDT, EMAIL, DIEMTICHLUY)
     VALUES (v_MaKH, v_MaTK, v_MaLoaiKhach, p_HoTen, p_NgaySinh, p_GioiTinh, p_SDT, p_Email, 0);
 
-    -- 5. XÁC NHẬN GIAO DỊCH (COMMIT)
-    p_MaKH := v_MaKH;
-    p_KetQua := 1;
-    p_Loi := 'Tạo tài khoản khách hàng thành công.';
-    COMMIT; -- Chốt Transaction, lưu cả 2 bảng cùng lúc
+    p_MaKH := v_MaKH; p_KetQua := 1; p_Loi := 'Tạo tài khoản khách hàng thành công.';
+    COMMIT; 
 
 EXCEPTION
     WHEN DUP_VAL_ON_INDEX THEN
-        ROLLBACK; -- Nếu có lỗi trùng lặp bất ngờ, hủy bỏ toàn bộ
-        p_KetQua := 0;
-        p_Loi := 'Lỗi dữ liệu: Thông tin (Email/SĐT) bị trùng lặp.';
+        ROLLBACK; 
+        p_KetQua := 0; p_Loi := 'Lỗi dữ liệu: Thông tin (Email/SĐT) bị trùng lặp.';
     WHEN OTHERS THEN
-        ROLLBACK; -- Lỗi hệ thống cũng phải hủy bỏ toàn bộ
-        p_KetQua := 0;
-        p_Loi := 'Lỗi hệ thống trong quá trình tạo tài khoản: ' || SQLERRM;
+        ROLLBACK; 
+        p_KetQua := 0; p_Loi := 'Lỗi hệ thống trong quá trình tạo tài khoản: ' || SQLERRM;
 END;
 /
-
 -- 2. SP_THEM_PHIM_MOI
 CREATE OR REPLACE PROCEDURE SP_THEM_PHIM_MOI (
     p_TenPhim       IN NVARCHAR2,
@@ -306,7 +294,7 @@ BEGIN
     FOR UPDATE NOWAIT;
 
     -- 2. THUỐC NGỦ DEMO (Giữ khóa trong 5 giây để demo cho giáo viên xem)
-    DBMS_LOCK.SLEEP(5);
+    DBMS_SESSION.SLEEP(5);
 
     -- 3. XỬ LÝ LOGIC ĐẶT CHỖ
     SELECT COUNT(*) INTO v_Count FROM DAT_CHO WHERE MASUAT = p_MaSuat AND MAGHE = p_MaGhe;
