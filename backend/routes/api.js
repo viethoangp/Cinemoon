@@ -1,22 +1,29 @@
 import { Router } from 'express';
-import { login, register } from '../controllers/authController.js';
-import { getMovies, getShowtimes, getSeats } from '../controllers/movieController.js';
-import { applyVoucher, cancelBooking, checkout, holdSeat } from '../controllers/bookingController.js';
+import catalogRouter from './catalog.js';
+import authRouter from './auth.js';
+import adminRouter from './admin.js';
+import bookingRouter from './booking.js';
+import demoRouter from './demo.js';
 
-export const apiRouter = Router();
+const router = Router();
 
-apiRouter.get('/health', (_req, res) => {
+// Health check
+router.get('/health', (_req, res) => {
   res.json({ success: true, message: 'Cinemoon backend is running.' });
 });
 
-apiRouter.post('/auth/login', login);
-apiRouter.post('/auth/register', register);
+// Route groups
+router.use('/auth', authRouter);
+router.use('/catalog', catalogRouter);
+router.use('/admin', adminRouter);
+router.use('/booking', bookingRouter);
+router.use('/demo', demoRouter);
 
-apiRouter.get('/movies', getMovies);
-apiRouter.get('/showtimes', getShowtimes);
-apiRouter.get('/seats', getSeats);
+// Legacy movie endpoints (to be deprecated in favor of /catalog/*)
+import { getMovies, getShowtimes, getSeats } from '../controllers/movieController.js';
 
-apiRouter.post('/booking/hold-seat', holdSeat);
-apiRouter.post('/booking/apply-voucher', applyVoucher);
-apiRouter.post('/booking/checkout', checkout);
-apiRouter.post('/booking/cancel', cancelBooking);
+router.get('/movies', getMovies);
+router.get('/showtimes', getShowtimes);
+router.get('/seats', getSeats);
+
+export default router;

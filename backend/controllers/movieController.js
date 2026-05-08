@@ -1,71 +1,81 @@
 import { getConnection } from '../config/db.js';
 
-export async function getMovies(req, res) {
-  let connection;
-  try {
-    connection = await getConnection();
-    const result = await connection.execute(
-      `SELECT MAPHIM AS "movieId", TENPHIM AS "title", THELOAI AS "genre", THOILUONG AS "duration", GIOIHANTUOI AS "ageLimit", TRANGTHAI AS "status"
-       FROM PHIM
-       ORDER BY NGAYPHATHANH DESC NULLS LAST, TENPHIM`
-    );
+export const getMovies = async (req, res) => {
+    let connection;
+    try {
+        connection = await getConnection();
+        
+        // Truy vấn lấy danh sách phim (Đang chiếu và Sắp chiếu)
+        // Format lại ngày tháng bằng TO_CHAR để Frontend dễ hiển thị
+        const query = `
+            SELECT MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, 
+                   TO_CHAR(NGAYPHATHANH, 'YYYY-MM-DD') AS NGAYPHATHANH, 
+                   POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI 
+            FROM PHIM 
+            WHERE TRANGTHAI IN ('Showing', 'Upcoming')
+            ORDER BY NGAYPHATHANH DESC
+        `;
+        
+        const result = await connection.execute(query);
 
-    return res.json({ success: true, data: result.rows || [] });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
+        res.status(200).json({
+            success: true,
+            data: result.rows,
+            message: 'Lấy danh sách phim thành công.'
+        });
+
+    } catch (error) {
+        console.error('Lỗi tại getMovies:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Lỗi máy chủ khi lấy dữ liệu phim.' 
+        });
+    } finally {
+        // QUY TẮC SỐNG CÒN: Luôn trả connection về Pool
+        if (connection) {
+            try {
+                await connection.close();
+            } catch (err) {
+                console.error('Lỗi khi đóng kết nối Oracle:', err);
+            }
+        }
     }
-  }
-}
+};
 
-export async function getShowtimes(req, res) {
-  let connection;
-  try {
-    const { movieId, date } = req.query;
-    connection = await getConnection();
-    const result = await connection.execute(
-      `SELECT MASUAT AS "showtimeId", MAPHIM AS "movieId", MAPHONG AS "screenId", NGAYCHIEU AS "showDate", GIOBATDAU AS "startTime", GIOKETTHUC AS "endTime", TRANGTHAISUAT AS "status"
-       FROM SUAT_CHIEU
-       WHERE (:movieId IS NULL OR MAPHIM = :movieId)
-         AND (:date IS NULL OR TRUNC(NGAYCHIEU) = TO_DATE(:date, 'YYYY-MM-DD'))
-       ORDER BY GIOBATDAU`,
-      { movieId: movieId || null, date: date || null }
-    );
-
-    return res.json({ success: true, data: result.rows || [] });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
+export const getShowtimes = async (req, res) => {
+    try {
+        const { maphim, maphong, ngaychieu } = req.query;
+        
+        // TODO: Use catalogController.getSuatChieu or implement here
+        res.status(200).json({
+            success: true,
+            data: [],
+            message: 'Lấy danh sách suất chiếu thành công. (Chưa triển khai)'
+        });
+    } catch (error) {
+        console.error('Lỗi tại getShowtimes:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi máy chủ khi lấy dữ liệu suất chiếu.'
+        });
     }
-  }
-}
+};
 
-export async function getSeats(req, res) {
-  let connection;
-  try {
-    const { showtimeId } = req.query;
-    connection = await getConnection();
-    const result = await connection.execute(
-      `SELECT g.MAGHE AS "seatId", g.MAPHONG AS "screenId", g.VITRI AS "position", lg.TENLOAI AS "seatType"
-       FROM GHE_NGOI g
-       LEFT JOIN LOAI_GHE lg ON lg.MALOAIGHE = g.MALOAIGHE
-       WHERE (:showtimeId IS NULL OR g.MAPHONG IN (
-         SELECT MAPHONG FROM SUAT_CHIEU WHERE MASUAT = :showtimeId
-       ))
-       ORDER BY g.VITRI`,
-      { showtimeId: showtimeId || null }
-    );
-
-    return res.json({ success: true, data: result.rows || [] });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
+export const getSeats = async (req, res) => {
+    try {
+        const { maphong, masuat } = req.query;
+        
+        // TODO: Use catalogController.getGheNgoi or implement here
+        res.status(200).json({
+            success: true,
+            data: [],
+            message: 'Lấy danh sách ghế thành công. (Chưa triển khai)'
+        });
+    } catch (error) {
+        console.error('Lỗi tại getSeats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi máy chủ khi lấy dữ liệu ghế.'
+        });
     }
-  }
-}
+};

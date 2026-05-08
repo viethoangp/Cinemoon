@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { apiRouter } from './routes/api.js';
+import apiRouter from './routes/api.js';
+import { errorHandler } from './middleware/errorHandler.js';
 import { closePool, initPool } from './config/db.js';
 
 const app = express();
@@ -16,10 +17,8 @@ app.get('/', (_req, res) => {
 
 app.use('/api', apiRouter);
 
-app.use((error, _req, res, _next) => {
-  const status = error?.status || 500;
-  res.status(status).json({ success: false, message: error?.message || 'Internal Server Error' });
-});
+// Global error handler
+app.use(errorHandler);
 
 async function start() {
   try {

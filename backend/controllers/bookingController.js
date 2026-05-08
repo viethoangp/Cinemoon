@@ -1,134 +1,185 @@
-import { getConnection, getOracle } from '../config/db.js';
+import {
+  holdSeats,
+  releaseHeldSeats,
+  validateAndApplyVoucher,
+  calculatePrice,
+  createTransaction,
+} from '../services/bookingService.js';
+import { buildResponse } from '../utils/responseBuilder.js';
 
-function mapOracleError(error) {
-  if (error?.errorNum === 54 || error?.errorNum === '54' || error?.message?.includes('ORA-00054')) {
-    return { status: 409, body: { message: 'Ghế đang có người giao dịch, vui lòng chọn ghế khác.' } };
-  }
-
-  return null;
-}
-
+/**
+ * Hold seat(s) for a user
+ * Handles ORA-00054 (resource busy) for concurrent access
+ * POST /api/booking/hold
+ * Body: { masuat, seatIds: [MAGHE1, MAGHE2], matk }
+ */
 export async function holdSeat(req, res) {
-  let connection;
   try {
-    const { bookingId, showtimeId, seatId } = req.body ?? {};
-    if (!bookingId || !showtimeId || !seatId) {
-      return res.status(400).json({ success: false, message: 'Thiếu bookingId, showtimeId hoặc seatId.' });
+    const { masuat, seatIds, matk } = req.body;
+
+    // Validate required fields
+    if (!masuat || !seatIds || !Array.isArray(seatIds) || seatIds.length === 0) {
+      return res.status(400).json(
+        buildResponse(false, 'Thiếu thông tin: masuat, seatIds (array)')
+      );
     }
 
-    connection = await getConnection();
-    const result = await connection.execute(
-      `BEGIN
-         :p_KetQua := 1;
-         :p_Loi := NULL;
-       END;`,
-      {
-        p_KetQua: { dir: getOracle().BIND_OUT, type: getOracle().NUMBER },
-        p_Loi: { dir: getOracle().BIND_OUT, type: getOracle().STRING, maxSize: 4000 },
+    // Use authenticated user ID if not provided
+    const userId = matk || req.user?.MATK;
+    if (!userId) {
+      return res.status(401).json(buildResponse(false, 'Chưa xác thực.'));
+    }
+
+    const result = await holdSeats(masuat, seatIds, userId);
+
+    if (!result.success) {
+      // Handle ORA-00054 specifically
+      if (result.errorCode === 'ORA-00054') {
+        return res.status(409).json(buildResponse(false, result.message, result));
       }
-    );
+      return res.status(400).json(buildResponse(false, result.message, result));
+    }
 
-    return res.json({ success: true, data: result.outBinds });
+    res.status(200).json(buildResponse(true, result.message, result.data));
   } catch (error) {
-    const mapped = mapOracleError(error);
-    if (mapped) {
-      return res.status(mapped.status).json(mapped.body);
-    }
-
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
-    }
+    console.error('Lỗi holdSeat:', error);
+    res.status(500).json(buildResponse(false, error.message, {}));
   }
 }
 
+/**
+ * Apply voucher/promotion code
+ * POST /api/booking/apply-voucher
+ * Body: { makhuyenmai, totalAmount }
+ */
 export async function applyVoucher(req, res) {
-  let connection;
   try {
-    const { bookingId, voucherId } = req.body ?? {};
-    if (!bookingId || !voucherId) {
-      return res.status(400).json({ success: false, message: 'Thiếu bookingId hoặc voucherId.' });
+    const { makhuyenmai, totalAmount } = req.body;
+
+    if (!makhuyenmai || !totalAmount) {
+      return res.status(400).json(
+        buildResponse(false, 'Thiếu thông tin: makhuyenmai, totalAmount')
+      );
     }
 
-    connection = await getConnection();
-    const result = await connection.execute(
-      `BEGIN
-         :p_TienGiam := 0;
-         :p_Loi := 'Voucher API scaffolding ready.';
-       END;`,
-      {
-        p_TienGiam: { dir: getOracle().BIND_OUT, type: getOracle().NUMBER },
-        p_Loi: { dir: getOracle().BIND_OUT, type: getOracle().STRING, maxSize: 4000 },
-      }
-    );
+    const result = await validateAndApplyVoucher(makhuyenmai, totalAmount);
 
-    return res.json({ success: true, data: result.outBinds });
+    if (!result.valid) {
+      return res.status(400).json(buildResponse(false, result.message, result));
+    }
+
+    res.status(200).json(buildResponse(true, result.message, result));
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
-    }
+    console.error('Lỗi applyVoucher:', error);
+    res.status(500).json(buildResponse(false, error.message, {}));
   }
 }
 
+/**
+ * Calculate ticket price
+ * POST /api/booking/calculate-price
+ * Body: { maloaighe, maloaikhach, ngaychieu, giobatdau }
+ */
+export async function calculateTicketPrice(req, res) {
+  try {
+    const { maloaighe, maloaikhach, ngaychieu, giobatdau } = req.body;
+
+    if (!maloaighe || !maloaikhach || !ngaychieu || !giobatdau) {
+      return res.status(400).json(
+        buildResponse(
+          false,
+          'Thiếu thông tin: maloaighe, maloaikhach, ngaychieu, giobatdau'
+        )
+      );
+    }
+
+    const price = await calculatePrice(maloaighe, maloaikhach, ngaychieu, giobatdau);
+
+    res.status(200).json(
+      buildResponse(true, 'Tính giá thành công.', { price })
+    );
+  } catch (error) {
+    console.error('Lỗi calculateTicketPrice:', error);
+    res.status(500).json(buildResponse(false, error.message, {}));
+  }
+}
+
+/**
+ * Complete checkout and create transaction
+ * POST /api/booking/checkout
+ * Body: { masuat, seatIds, makhuyenmai?, paymentMethod, totalAmount }
+ */
 export async function checkout(req, res) {
-  let connection;
   try {
-    const { bookingId, paymentMethod, amount } = req.body ?? {};
-    if (!bookingId || !paymentMethod || amount == null) {
-      return res.status(400).json({ success: false, message: 'Thiếu bookingId, paymentMethod hoặc amount.' });
+    const { masuat, seatIds, makhuyenmai, paymentMethod, totalAmount } = req.body;
+    const matk = req.user?.MATK;
+
+    if (!matk) {
+      return res.status(401).json(buildResponse(false, 'Chưa xác thực.'));
     }
 
-    connection = await getConnection();
-    const result = await connection.execute(
-      `BEGIN
-         :p_KetQua := 1;
-         :p_ThongBao := 'Checkout API scaffolding ready.';
-       END;`,
-      {
-        p_KetQua: { dir: getOracle().BIND_OUT, type: getOracle().NUMBER },
-        p_ThongBao: { dir: getOracle().BIND_OUT, type: getOracle().STRING, maxSize: 4000 },
+    if (!masuat || !seatIds || !Array.isArray(seatIds) || !totalAmount) {
+      return res.status(400).json(
+        buildResponse(
+          false,
+          'Thiếu thông tin: masuat, seatIds (array), totalAmount'
+        )
+      );
+    }
+
+    // Apply discount if voucher provided
+    let discount = 0;
+    if (makhuyenmai) {
+      const voucherResult = await validateAndApplyVoucher(
+        makhuyenmai,
+        totalAmount
+      );
+      if (voucherResult.valid) {
+        discount = voucherResult.discount;
       }
-    );
-
-    return res.json({ success: true, data: result.outBinds });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
     }
+
+    // Create transaction
+    const result = await createTransaction({
+      masuat,
+      matk,
+      seatIds,
+      discount,
+      paymentMethod,
+      totalAmount,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(buildResponse(false, result.message, result));
+    }
+
+    res.status(201).json(buildResponse(true, result.message, result.data));
+  } catch (error) {
+    console.error('Lỗi checkout:', error);
+    res.status(500).json(buildResponse(false, error.message, {}));
   }
 }
 
+/**
+ * Cancel booking and release held seats
+ * POST /api/booking/cancel
+ * Body: { datIds: [MADAT1, MADAT2] }
+ */
 export async function cancelBooking(req, res) {
-  let connection;
   try {
-    const { bookingId, cancelledBy } = req.body ?? {};
-    if (!bookingId || !cancelledBy) {
-      return res.status(400).json({ success: false, message: 'Thiếu bookingId hoặc cancelledBy.' });
+    const { datIds } = req.body;
+
+    if (!datIds || !Array.isArray(datIds) || datIds.length === 0) {
+      return res.status(400).json(buildResponse(false, 'Thiếu thông tin: datIds (array)'));
     }
 
-    connection = await getConnection();
-    const result = await connection.execute(
-      `BEGIN
-         :p_KetQua := 1;
-         :p_ThongBao := 'Cancel booking API scaffolding ready.';
-       END;`,
-      {
-        p_KetQua: { dir: getOracle().BIND_OUT, type: getOracle().NUMBER },
-        p_ThongBao: { dir: getOracle().BIND_OUT, type: getOracle().STRING, maxSize: 4000 },
-      }
+    const result = await releaseHeldSeats(datIds);
+
+    res.status(200).json(
+      buildResponse(true, `Hủy ${result.released} đặt chỗ thành công.`, result)
     );
-
-    return res.json({ success: true, data: result.outBinds });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  } finally {
-    if (connection) {
-      await connection.release();
-    }
+    console.error('Lỗi cancelBooking:', error);
+    res.status(500).json(buildResponse(false, error.message, {}));
   }
 }
