@@ -169,15 +169,30 @@ export const MOVIES: Movie[] = [
     cast: ["Johnny Trí Nguyễn", "Ngân Khánh", "Lý Nhã Kỳ"],
   },
 ];
-
+const getSaved = (key: string, defaultValue: any) => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(MOVIES[4]);
-  const [selectedSeats, setSelectedSeats] = useState<string[]>(['D5', 'D6']);
-  const [selectedShowtime, setSelectedShowtime] = useState('19:30');
-  const [selectedDate, setSelectedDate] = useState('2026-05-08');
-  const [selectedCinema, setSelectedCinema] = useState('Cinemoon Hà Nội - Mipec');
-  const [selectedSuatChieu, setSelectedSuatChieu] = useState<ApiShowtime | null>(null);
-
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => getSaved('selectedMovie', null));
+  const [selectedSeats, setSelectedSeats] = useState<string[]>(() => getSaved('selectedSeats', []));
+  const [selectedShowtime, setSelectedShowtime] = useState<string>(() => getSaved('selectedShowtime', '19:30'));
+  const [selectedDate, setSelectedDate] = useState<string>(() => getSaved('selectedDate', ''));
+  const [selectedCinema, setSelectedCinema] = useState<string>(() => getSaved('selectedCinema', ''));
+  const [selectedSuatChieu, setSelectedSuatChieu] = useState<ApiShowtime | null>(() => getSaved('selectedSuatChieu', null));
+  // Tự động lưu trạng thái vào localStorage mỗi khi có sự thay đổi
+  useEffect(() => {
+    if (selectedMovie) localStorage.setItem('selectedMovie', JSON.stringify(selectedMovie));
+    if (selectedSuatChieu) localStorage.setItem('selectedSuatChieu', JSON.stringify(selectedSuatChieu));
+    localStorage.setItem('selectedSeats', JSON.stringify(selectedSeats));
+    localStorage.setItem('selectedShowtime', JSON.stringify(selectedShowtime));
+    localStorage.setItem('selectedDate', JSON.stringify(selectedDate));
+    localStorage.setItem('selectedCinema', JSON.stringify(selectedCinema));
+  }, [selectedMovie, selectedSuatChieu, selectedSeats, selectedShowtime, selectedDate, selectedCinema]);
   // Movie API states
   const [allMovies, setAllMovies] = useState<Movie[]>([]);
   const [showingMovies, setShowingMovies] = useState<Movie[]>([]);

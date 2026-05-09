@@ -109,9 +109,16 @@ export async function holdSeats(masuat, seatIds, userId) {
   let connection;
   try {
     connection = await getConnection();
-    const oracledb = getOracle();
-
-    // Step 1: Check seat availability and get current showtime details
+    // BƯỚC 0: NGƯỜI QUÉT DỌN (TỰ ĐỘNG GIẢI PHÓNG GHẾ HẾT HẠN)
+    // Xóa tất cả các ghế của suất chiếu này đã quá 15 phút mà chưa thanh toán
+    const cleanupQuery = `
+      DELETE FROM DAT_CHO 
+      WHERE MASUAT = :masuat 
+        AND TRANGTHAICHO = 'Held' 
+        AND GIUDEN < CURRENT_TIMESTAMP
+    `;
+    await connection.execute(cleanupQuery, { masuat });
+    // Bước 1: Kiểm tra suất chiếu
     const checkQuery = `
       SELECT sc.MASUAT, sc.MAPHIM, sc.MAPHONG, sc.TRANGTHAISUAT
       FROM SUAT_CHIEU sc
@@ -124,17 +131,15 @@ export async function holdSeats(masuat, seatIds, userId) {
     }
 
     const showtime = checkResult.rows[0];
-    const [suatId, phimId, phongId, trangThaiSuat] = showtime;
+    const suatId = showtime.MASUAT || showtime[0];
+    const phongId = showtime.MAPHONG || showtime[2];
+    const trangThaiSuat = showtime.TRANGTHAISUAT || showtime[3];
 
     if (trangThaiSuat !== 'Showing') {
-      return {
-        success: false,
-        message: 'Suất chiếu không disponible để đặt vé.',
-      };
+      return { success: false, message: 'Suất chiếu không khả dụng để đặt vé.' };
     }
 
-    // Step 2: Try to lock seats with SELECT FOR UPDATE NOWAIT
-    // Build seat ID list for IN clause
+    // Bước 2: Lock ghế chống giành giật
     const seatIdList = seatIds.map((_, i) => `:seat${i}`).join(',');
     const seatParams = { maphong: phongId };
     seatIds.forEach((id, i) => {
@@ -152,11 +157,20 @@ export async function holdSeats(masuat, seatIds, userId) {
     try {
       const lockResult = await connection.execute(lockQuery, seatParams);
       if (!lockResult.rows || lockResult.rows.length !== seatIds.length) {
-        return { success: false, message: 'Một số ghế không tồn tại.' };
+        return { success: false, message: 'Một số ghế không tồn tại trong phòng.' };
       }
 
-      // Step 3: Create temporary DAT_CHO records for seat holds
-      // We'll create temp records with a placeholder MAGD (will be replaced during checkout)
+      // 🔥 BƯỚC 3 (ĐÃ FIX): TẠO GIAO DỊCH (PENDING) TRƯỚC ĐỂ THỎA MÃN KHÓA NGOẠI
+      // Tạo mã GD ngẫu nhiên theo chuẩn (VD: GD_8943_123)
+      const maGD = `GD_${Date.now().toString().slice(-4)}_${Math.floor(Math.random()*1000)}`;
+      
+      const insertGdQuery = `
+        INSERT INTO GIAO_DICH (MAGD, THOIGIANTAO, TONGTIEN, TRANGTHAIGD)
+        VALUES (:magd, CURRENT_TIMESTAMP, 0, 'Pending')
+      `;
+      await connection.execute(insertGdQuery, { magd: maGD });
+
+      // BƯỚC 4: LƯU GHẾ VÀO DAT_CHO VỚI MÃ GIAO DỊCH VỪA TẠO
       const heldSeats = [];
       for (const seatId of seatIds) {
         const insertQuery = `
@@ -168,14 +182,12 @@ export async function holdSeats(masuat, seatIds, userId) {
           await connection.execute(insertQuery, {
             masuat: suatId,
             maghe: seatId,
-            magd: `TEMP_${Date.now()}_${seatId}`,
+            magd: maGD // Truyền mã giao dịch thật vào
           });
           heldSeats.push(seatId);
         } catch (err) {
-          // ORA-00001: unique constraint violated (seat already held)
-          if (err.errorNum === 1 || err.message.includes('ORA-00001')) {
-            console.log(`Ghế ${seatId} đã được đặt.`);
-            // Continue with other seats
+          if (err.errorNum === 1 || (err.message && err.message.includes('ORA-00001'))) {
+            console.log(`Ghế ${seatId} đã bị giữ trong bảng DAT_CHO.`);
           } else {
             throw err;
           }
@@ -183,27 +195,27 @@ export async function holdSeats(masuat, seatIds, userId) {
       }
 
       if (heldSeats.length === 0) {
-        return { success: false, message: 'Không thể giữ ghế. Vui lòng thử lại.' };
+        return { success: false, message: 'Không thể giữ ghế.' };
       }
 
+      // Lưu tất cả thay đổi xuống Database
       await connection.commit();
 
       return {
         success: true,
         message: `Giữ ${heldSeats.length}/${seatIds.length} ghế thành công.`,
-        data: {
-          masuat: suatId,
+        data: { 
+          masuat: suatId, 
           heldSeats,
-          totalHeld: heldSeats.length,
-          totalRequested: seatIds.length,
-        },
+          magd: maGD // Trả cái mã này lên Frontend để lát sang trang Checkout dùng
+        }
       };
+      
     } catch (lockError) {
-      if (lockError.errorNum === 54 || lockError.message.includes('ORA-00054')) {
+      if (lockError.errorNum === 54 || (lockError.message && lockError.message.includes('ORA-00054'))) {
         return {
           success: false,
-          message:
-            'Ghế đang có người giao dịch. Vui lòng chọn ghế khác hoặc thử lại sau.',
+          message: 'Ghế bạn chọn vừa có người khác giữ. Vui lòng chọn ghế khác!',
           errorCode: 'ORA-00054',
         };
       }
@@ -211,21 +223,13 @@ export async function holdSeats(masuat, seatIds, userId) {
     }
   } catch (error) {
     if (connection) {
-      try {
-        await connection.rollback();
-      } catch (rbErr) {
-        console.error('Lỗi rollback:', rbErr);
-      }
+      try { await connection.rollback(); } catch (rbErr) {}
     }
     console.error('Lỗi holdSeats:', error);
-    throw error;
+    throw error; 
   } finally {
     if (connection) {
-      try {
-        await connection.close();
-      } catch (closeErr) {
-        console.error('Lỗi close connection:', closeErr);
-      }
+      try { await connection.close(); } catch (closeErr) {}
     }
   }
 }

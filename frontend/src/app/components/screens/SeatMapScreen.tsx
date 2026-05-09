@@ -31,6 +31,7 @@ export const SeatMapScreen = () => {
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(9 * 60 + 59); // 9:59
   const [isHolding, setIsHolding] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Đếm ngược giữ ghế
   useEffect(() => {
@@ -103,7 +104,7 @@ export const SeatMapScreen = () => {
     };
 
     fetchSeats();
-  }, [selectedSuatChieu]);
+  }, [selectedSuatChieu, refreshTrigger]);
 
   // 2. NHÓM DÒNG
   const groupedSeats = seats.reduce((acc, seat) => {
@@ -156,21 +157,22 @@ export const SeatMapScreen = () => {
       navigate('/checkout');
     } catch (error: any) {
       // Nếu Backend báo lỗi (ví dụ ghế đã bị nẫng tay trên)
-      alert(error.message || 'Ghế bạn chọn vừa có người khác giữ. Vui lòng chọn ghế khác!');
-      
+      alert('Ghế bạn chọn vừa có người khác giữ. Vui lòng chọn ghế khác!');
+      if (setSelectedSeats) setSelectedSeats([]);
       // Tải lại sơ đồ ghế để cập nhật trạng thái mới nhất từ DB
-      window.location.reload(); 
+      setRefreshTrigger(prev => prev + 1);
     } finally {
       setIsHolding(false);
     }
   };
   const movie = selectedMovie;
-  if (!movie) {
+  if (!movie || !selectedSuatChieu) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#121212] text-white">
         <div className="text-center">
-          <p className="text-gray-400 mb-4">Chưa chọn phim hoặc Suất chiếu</p>
-          <button onClick={() => navigate('/home')} className="bg-[#E50914] text-white px-6 py-2 rounded-lg">
+          <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-400 mb-4">Đang khôi phục dữ liệu phòng chiếu...</p>
+          <button onClick={() => navigate('/home')} className="bg-[#E50914] text-white px-6 py-2 rounded-lg mt-2">
             Về trang chủ
           </button>
         </div>
