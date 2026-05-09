@@ -27,6 +27,8 @@ interface AppContextType {
   // Booking selection
   selectedSeats: string[];
   setSelectedSeats: (seats: string[]) => void;
+  toggleSeat: (seatId: string) => void;
+  clearSelectedSeats: () => void;
   selectedShowtime: string;
   setSelectedShowtime: (showtime: string) => void;
   selectedDate: string;
@@ -63,6 +65,8 @@ interface AppContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
+
+  
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -199,7 +203,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  
+
+  // Logic chọn/bỏ chọn ghế
+  const toggleSeat = (seatId: string) => {
+    setSelectedSeats(prev => 
+      prev.includes(seatId) 
+        ? prev.filter(id => id !== seatId) // Có rồi thì xóa
+        : [...prev, seatId]               // Chưa có thì thêm
+    );
+  };
+
+  const clearSelectedSeats = () => setSelectedSeats([]);
   // Initialize user from localStorage on mount
   useEffect(() => {
     const storedUser = getUser();
@@ -307,6 +321,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     <AppContext.Provider value={{
       selectedMovie, setSelectedMovie,
       selectedSeats, setSelectedSeats,
+      toggleSeat, clearSelectedSeats,
       selectedShowtime, setSelectedShowtime,
       selectedDate, setSelectedDate,
       selectedCinema, setSelectedCinema,

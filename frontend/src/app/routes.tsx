@@ -3,7 +3,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { LoginScreen } from './components/screens/LoginScreen';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { ShowtimeScreen } from './components/screens/ShowtimeScreen';
-import { SeatMapScreen } from './components/screens/SeatMapScreen';
+import {SeatMapScreen} from './components/screens/SeatMapScreen';
 import { CheckoutScreen } from './components/screens/CheckoutScreen';
 import { ProfileScreen } from './components/screens/ProfileScreen';
 import { AdminScreen } from './components/screens/AdminScreen';

@@ -2,49 +2,37 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronLeft, Clock, MapPin, Film, Info } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { catalogAPI, bookingAPI } from '../../../services/api';
 
-// Seat configuration
-const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-const COLS = Array.from({ length: 12 }, (_, i) => i + 1);
-const VIP_ROWS = ['D', 'E', 'F'];
+interface ApiSeat {
+  MAGHE: string;
+  TENGHE: string;
+  MALOAIGHE: string;
+  TRANGTHAI: string;
+  TENLOAI: string;
+}
 
-// Pre-booked seats
-const BOOKED_SEATS = new Set([
-  'A2', 'A3', 'A8', 'A9',
-  'B4', 'B5', 'B6',
-  'C1', 'C7', 'C8', 'C11',
-  'D3', 'D9', 'D10',
-  'E1', 'E2', 'E5', 'E6', 'E11', 'E12',
-  'F4', 'F7', 'F8',
-  'G2', 'G3', 'G9', 'G10',
-  'H5', 'H6', 'H7',
-]);
-
-type SeatStatus = 'available' | 'booked' | 'selected' | 'vip-available';
-
-const getSeatStatus = (row: string, col: number, selectedSeats: string[]): SeatStatus => {
-  const key = `${row}${col}`;
-  if (BOOKED_SEATS.has(key)) return 'booked';
-  if (selectedSeats.includes(key)) return 'selected';
-  if (VIP_ROWS.includes(row)) return 'vip-available';
-  return 'available';
-};
-
-const formatCurrency = (n: number) => n.toLocaleString('vi-VN') + 'đ';
-
-const TICKET_PRICE_MAP: Record<SeatStatus, number> = {
-  'available': 85000,
-  'vip-available': 110000,
-  'booked': 0,
-  'selected': 0,
-};
+const MOCK_BOOKED_SEATS = new Set(['A2', 'A3', 'C7', 'D3', 'E5', 'F8']);
 
 export const SeatMapScreen = () => {
   const navigate = useNavigate();
-  const { selectedMovie, selectedSeats, setSelectedSeats, selectedShowtime, selectedDate, selectedCinema } = useApp();
+  const { 
+    selectedMovie, 
+    selectedSeats, 
+    setSelectedSeats, 
+    selectedShowtime, 
+    selectedDate, 
+    selectedCinema,
+    selectedSuatChieu, // Thêm cái này để lấy MAPHONG
+    toggleSeat 
+  } = useApp();
 
+  const [seats, setSeats] = useState<ApiSeat[]>([]);
+  const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(9 * 60 + 59); // 9:59
+  const [isHolding, setIsHolding] = useState(false);
 
+  // Đếm ngược giữ ghế
   useEffect(() => {
     if (timeLeft <= 0) return;
     const t = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
@@ -63,31 +51,125 @@ export const SeatMapScreen = () => {
     return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
   };
 
-  const handleSeatClick = useCallback((row: string, col: number) => {
-    const key = `${row}${col}`;
-    if (BOOKED_SEATS.has(key)) return;
-    setSelectedSeats(
-      selectedSeats.includes(key)
-        ? selectedSeats.filter(s => s !== key)
-        : [...selectedSeats, key]
-    );
-  }, [selectedSeats, setSelectedSeats]);
 
-  const totalPrice = selectedSeats.reduce((sum, seat) => {
-    const row = seat[0];
-    const isVip = VIP_ROWS.includes(row);
-    return sum + (isVip ? 110000 : 85000);
-  }, 0);
+// 1. ÁO GIÁP BẢO VỆ & PHỤC DỰNG GHẾ TỪ ORACLE
+  useEffect(() => {
+    const fetchSeats = async () => {
+      try {
+        setLoading(true);
+        const maphong = selectedSuatChieu?.MAPHONG || 'PC001';
+        let rawData = await catalogAPI.getSeats(maphong);
 
-  const serviceFee = Math.round(totalPrice * 0.05);
-  const grandTotal = totalPrice + serviceFee;
+        // Bóc tách data nếu API bọc trong object
+        if (rawData && !Array.isArray(rawData) && (rawData as any).data) {
+          rawData = (rawData as any).data;
+        }
+        if (!Array.isArray(rawData)) rawData = [];
 
+        // CHUẨN HÓA VÀ PHỤC DỰNG DỮ LIỆU
+        const safeSeats: ApiSeat[] = rawData.map((s: any, index: number) => {
+          const maGhe = s.MAGHE || s.maghe || s.id || `MOCK_${index}`;
+          let tenGhe = s.TENGHE || s.tenghe || s.name || '';
+
+          // THUẬT TOÁN BIẾN GHE001 -> A1
+          if (!tenGhe && maGhe.toUpperCase().includes('GHE')) {
+            const numMatch = maGhe.match(/\d+/);
+            if (numMatch) {
+              const num = parseInt(numMatch[0], 10);
+              const rowIndex = Math.floor((num - 1) / 12); // Dòng A, B, C... (chia 12 ghế/dòng)
+              const colIndex = ((num - 1) % 12) + 1;       // Cột 1, 2, 3...
+              tenGhe = `${String.fromCharCode(65 + rowIndex)}${colIndex}`;
+            }
+          } else if (!tenGhe) {
+            // Nếu format mã ghế khác, cứ đánh bừa A1, A2 để không bị lỗi màn hình
+            tenGhe = `A${index + 1}`; 
+          }
+
+          return {
+            MAGHE: maGhe,
+            TENGHE: tenGhe,
+            MALOAIGHE: s.MALOAIGHE || s.maloaighe || 'LG001',
+            TRANGTHAI: s.TRANGTHAI || s.trangthai || s.status || 'Available',
+            TENLOAI: s.TENLOAI || s.tenloai || s.type || (['D', 'E', 'F'].includes(tenGhe.charAt(0)) ? 'VIP' : 'Standard')
+          };
+        }).filter(s => s.TENGHE !== '');
+
+        setSeats(safeSeats);
+      } catch (error) {
+        console.error('Lỗi khi lấy sơ đồ ghế:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSeats();
+  }, [selectedSuatChieu]);
+
+  // 2. NHÓM DÒNG
+  const groupedSeats = seats.reduce((acc, seat) => {
+    const row = seat.TENGHE.charAt(0);
+    if (!acc[row]) acc[row] = [];
+    acc[row].push(seat);
+    return acc;
+  }, {} as Record<string, ApiSeat[]>);
+
+  const rows = Object.keys(groupedSeats).sort();
+
+  // 3. KIỂM TRA TRẠNG THÁI MÀU GHẾ
+  const getSeatStatus = (seat: ApiSeat): 'available' | 'booked' | 'selected' | 'vip-available' => {
+    if (MOCK_BOOKED_SEATS.has(seat.TENGHE) || seat.TRANGTHAI !== 'Available') return 'booked';
+    if (selectedSeats.includes(seat.MAGHE)) return 'selected';
+    if (seat.TENLOAI === 'VIP' || seat.MALOAIGHE === 'LG002') return 'vip-available';
+    return 'available';
+  };
+
+  const handleSeatClick = useCallback((maghe: string) => {
+    // Chống sập nếu Context chưa nạp kịp
+    if (toggleSeat) {
+      toggleSeat(maghe);
+    } else if (setSelectedSeats) {
+      setSelectedSeats(
+        selectedSeats.includes(maghe)
+          ? selectedSeats.filter(s => s !== maghe)
+          : [...selectedSeats, maghe]
+      );
+    }
+  }, [selectedSeats, toggleSeat, setSelectedSeats]);
+
+  // Tính tiền
+  const getSeatPrice = (tenLoai: string) => (tenLoai === 'VIP' ? 110000 : 85000);
+  const selectedSeatObjects = seats.filter(s => selectedSeats.includes(s.MAGHE));
+  const ticketTotal = selectedSeatObjects.reduce((sum, seat) => sum + getSeatPrice(seat.TENLOAI), 0);
+  const serviceFee = ticketTotal > 0 ? Math.round(ticketTotal * 0.05) : 0;
+  const grandTotal = ticketTotal + serviceFee;
+
+  const formatCurrency = (n: number) => n.toLocaleString('vi-VN') + 'đ';
+  const handleContinue = async () => {
+    if (selectedSeats.length === 0 || !selectedSuatChieu) return;
+
+    try {
+      setIsHolding(true);
+      // Gọi API khóa ghế (Pessimistic Locking ORA-00054)
+      await bookingAPI.holdSeats(selectedSuatChieu.MASUAT, selectedSeats);
+      
+      // Nếu không có lỗi (nghĩa là không ai đang giữ ghế này), tiến tới Checkout
+      navigate('/checkout');
+    } catch (error: any) {
+      // Nếu Backend báo lỗi (ví dụ ghế đã bị nẫng tay trên)
+      alert(error.message || 'Ghế bạn chọn vừa có người khác giữ. Vui lòng chọn ghế khác!');
+      
+      // Tải lại sơ đồ ghế để cập nhật trạng thái mới nhất từ DB
+      window.location.reload(); 
+    } finally {
+      setIsHolding(false);
+    }
+  };
   const movie = selectedMovie;
   if (!movie) {
     return (
-      <div className="flex items-center justify-center h-full text-white">
+      <div className="flex items-center justify-center h-screen bg-[#121212] text-white">
         <div className="text-center">
-          <p className="text-gray-400 mb-4">Chưa chọn phim</p>
+          <p className="text-gray-400 mb-4">Chưa chọn phim hoặc Suất chiếu</p>
           <button onClick={() => navigate('/home')} className="bg-[#E50914] text-white px-6 py-2 rounded-lg">
             Về trang chủ
           </button>
@@ -97,178 +179,141 @@ export const SeatMapScreen = () => {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }} className="bg-[#121212]">
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }} className="bg-[#121212]">
       {/* Sub-header */}
-      <div className="bg-[#0D0D0D] border-b border-[#2A2A2A] px-8 py-4 flex items-center justify-between">
+      <div className="bg-[#0D0D0D] border-b border-[#2A2A2A] px-4 md:px-8 py-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/showtime')}
-            className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
-          >
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors">
             <ChevronLeft className="w-5 h-5" />
-            <span className="text-sm">Quay lại</span>
+            <span className="text-sm hidden md:inline">Quay lại</span>
           </button>
           <div className="w-px h-5 bg-[#2A2A2A]" />
           <div className="flex items-center gap-2">
-            <Film className="w-4 h-4 text-[#E50914]" />
-            <span className="text-white font-medium text-sm">{movie.title}</span>
+            <Film className="w-4 h-4 text-[#E50914] hidden md:block" />
+            <span className="text-white font-medium text-sm line-clamp-1">{movie.title}</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-500 text-sm">
+          <div className="hidden md:flex items-center gap-2 text-gray-500 text-sm">
             <Clock className="w-4 h-4" />
-            {selectedShowtime} · {formatDateLabel(selectedDate)}
-          </div>
-          <div className="flex items-center gap-2 text-gray-500 text-sm">
-            <MapPin className="w-4 h-4" />
-            {selectedCinema}
+            {selectedShowtime || '19:30'} · {formatDateLabel(selectedDate)}
           </div>
         </div>
         {/* Countdown */}
-        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${timeLeft < 120 ? 'border-[#E50914] bg-[#E50914]/10' : 'border-[#2A2A2A] bg-[#1A1A1A]'}`}>
+        <div className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg border ${timeLeft < 120 ? 'border-[#E50914] bg-[#E50914]/10' : 'border-[#2A2A2A] bg-[#1A1A1A]'}`}>
           <Clock className={`w-4 h-4 ${timeLeft < 120 ? 'text-[#E50914]' : 'text-gray-400'}`} />
           <span className={`font-bold font-mono text-sm ${timeLeft < 120 ? 'text-[#E50914]' : 'text-gray-300'}`}>
             {formatTime(timeLeft)}
           </span>
-          <span className="text-gray-500 text-xs">Thời gian giữ ghế</span>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* LEFT: Seat map — 70% */}
-        <div className="flex-1 flex flex-col items-center overflow-auto py-6 px-8">
-          {/* Screen arc */}
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        {/* LEFT: Seat map */}
+        <div className="flex-1 flex flex-col items-center overflow-auto py-6 px-4 md:px-8">
           <div className="w-full max-w-2xl mb-8">
-            <div
-              className="relative h-10 mx-8"
-              style={{
+            <div className="relative h-6 md:h-10 mx-8" style={{
                 background: 'linear-gradient(to bottom, rgba(229,9,20,0.15), transparent)',
                 borderRadius: '50% 50% 0 0 / 100% 100% 0 0',
                 border: '2px solid rgba(229,9,20,0.4)',
                 borderBottom: 'none',
               }}
             />
-            <p className="text-center text-gray-500 text-xs tracking-widest uppercase mt-1">Màn hình</p>
+            <p className="text-center text-gray-500 text-[10px] md:text-xs tracking-widest uppercase mt-1">Màn hình</p>
           </div>
 
-          {/* Seat grid */}
-          <div className="w-full max-w-2xl">
-            {ROWS.map((row) => (
-              <div key={row} className="flex items-center gap-2 mb-2">
-                {/* Row label */}
-                <span className="w-6 text-gray-600 text-xs text-center flex-shrink-0">{row}</span>
-
-                {/* Seats */}
-                <div className="flex gap-1.5 flex-1 justify-center">
-                  {COLS.map((col) => {
-                    const status = getSeatStatus(row, col, selectedSeats);
-                    const key = `${row}${col}`;
-
-                    // Aisle gap
-                    const gap = col === 4 || col === 10;
-
-                    return (
-                      <React.Fragment key={key}>
-                        {gap && <div className="w-3" />}
-                        <button
-                          onClick={() => handleSeatClick(row, col)}
-                          disabled={status === 'booked'}
-                          title={`Ghế ${key}${VIP_ROWS.includes(row) ? ' (VIP)' : ''}`}
-                          className={`
-                            w-7 h-6 rounded-t-lg text-[9px] font-medium transition-all
-                            ${status === 'booked'
-                              ? 'bg-[#E50914]/80 text-white cursor-not-allowed'
-                              : status === 'selected'
-                                ? 'bg-[#F5C518] text-[#121212] shadow-md shadow-yellow-500/40 scale-110'
-                                : status === 'vip-available'
-                                  ? 'bg-[#2A1F00] border border-[#F5C518]/30 text-[#F5C518]/70 hover:bg-[#F5C518]/20 hover:border-[#F5C518] hover:text-[#F5C518]'
-                                  : 'bg-[#252525] border border-[#3A3A3A] text-gray-600 hover:bg-[#3A3A3A] hover:text-white hover:border-gray-500'
-                            }
-                          `}
-                        >
-                          {col}
-                        </button>
-                      </React.Fragment>
-                    );
-                  })}
+          {loading ? (
+             <div className="flex-1 flex items-center justify-center">
+               <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin" />
+             </div>
+          ) : (
+            <div className="w-full max-w-2xl pb-10">
+              {rows.map((rowLabel) => (
+                <div key={rowLabel} className="flex items-center gap-1.5 md:gap-2 mb-2 justify-center">
+                  <span className="w-4 md:w-6 text-gray-600 text-xs text-center flex-shrink-0">{rowLabel}</span>
+                  <div className="flex gap-1 md:gap-1.5 justify-center">
+                    {groupedSeats[rowLabel]
+                      .sort((a, b) => a.TENGHE.localeCompare(b.TENGHE, undefined, { numeric: true }))
+                      .map((seat, idx) => {
+                        const status = getSeatStatus(seat);
+                        const isVip = status === 'vip-available';
+                        const gap = idx === 3 || idx === 9; // Lối đi phụ
+                        
+                        return (
+                          <React.Fragment key={seat.MAGHE}>
+                            {gap && <div className="w-2 md:w-4" />}
+                            <button
+                              onClick={() => handleSeatClick(seat.MAGHE)}
+                              disabled={status === 'booked'}
+                              className={`
+                                w-6 h-6 md:w-7 md:h-6 rounded-t text-[8px] md:text-[9px] font-medium transition-all
+                                ${status === 'booked'
+                                  ? 'bg-[#E50914]/80 text-white cursor-not-allowed'
+                                  : status === 'selected'
+                                    ? 'bg-[#F5C518] text-[#121212] shadow-md shadow-yellow-500/40 scale-110'
+                                    : isVip
+                                      ? 'bg-[#2A1F00] border border-[#F5C518]/40 text-[#F5C518]/70 hover:bg-[#F5C518]/20 hover:border-[#F5C518] hover:text-[#F5C518]'
+                                      : 'bg-[#252525] border border-[#3A3A3A] text-gray-600 hover:bg-[#3A3A3A] hover:text-white hover:border-gray-500'
+                                }
+                              `}
+                            >
+                              {seat.TENGHE.replace(/[A-Z]/, '')}
+                            </button>
+                          </React.Fragment>
+                        );
+                    })}
+                  </div>
+                  <span className="w-4 md:w-6 text-gray-600 text-xs text-center flex-shrink-0">{rowLabel}</span>
                 </div>
+              ))}
+            </div>
+          )}
 
-                {/* Row label right */}
-                <span className="w-6 text-gray-600 text-xs text-center flex-shrink-0">{row}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-8 mt-8 pb-4">
+          <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 mt-4 pb-4">
             {[
-              { color: 'bg-[#252525] border border-[#3A3A3A]', label: 'Trống (85K)' },
+              { color: 'bg-[#252525] border border-[#3A3A3A]', label: 'Thường (85K)' },
               { color: 'bg-[#2A1F00] border border-[#F5C518]/40', label: 'VIP (110K)', textColor: 'text-[#F5C518]' },
-              { color: 'bg-[#F5C518]', label: 'Đang chọn' },
-              { color: 'bg-[#E50914]/80', label: 'Đã bán' },
+              { color: 'bg-[#F5C518]', label: 'Đang chọn', textColor: 'text-gray-300' },
+              { color: 'bg-[#E50914]/80', label: 'Đã bán', textColor: 'text-gray-300' },
             ].map(({ color, label, textColor }) => (
               <div key={label} className="flex items-center gap-2">
-                <div className={`w-6 h-5 rounded-t ${color}`} />
-                <span className={`text-xs ${textColor || 'text-gray-500'}`}>{label}</span>
+                <div className={`w-5 h-4 md:w-6 md:h-5 rounded-t ${color}`} />
+                <span className={`text-[10px] md:text-xs ${textColor || 'text-gray-500'}`}>{label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* RIGHT: Order summary — 30% */}
-        <div className="w-80 border-l border-[#2A2A2A] bg-[#161616] flex flex-col overflow-auto">
-          {/* Movie poster + info */}
-          <div className="p-5 border-b border-[#2A2A2A]">
+        {/* RIGHT: Order summary */}
+        <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-[#2A2A2A] bg-[#161616] flex flex-col md:h-full">
+          <div className="p-4 md:p-5 border-b border-[#2A2A2A] hidden md:block">
             <div className="flex gap-3 mb-4">
-              <img src={movie.image} alt={movie.title} className="w-16 h-22 object-cover rounded-lg flex-shrink-0" style={{ height: '88px' }} />
+              <img src={movie.image} alt={movie.title} className="w-16 object-cover rounded-lg flex-shrink-0" style={{ height: '88px' }} />
               <div>
                 <h3 className="text-white font-semibold text-sm mb-1">{movie.title}</h3>
                 <p className="text-gray-500 text-xs mb-1">{movie.genre}</p>
                 <p className="text-gray-500 text-xs">{movie.duration}</p>
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" /> Giờ chiếu
-                </span>
-                <span className="text-white font-medium">{selectedShowtime}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Ngày chiếu</span>
-                <span className="text-white">{formatDateLabel(selectedDate)}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5" /> Rạp
-                </span>
-                <span className="text-white text-right text-xs max-w-[160px]">{selectedCinema}</span>
-              </div>
-            </div>
           </div>
 
-          {/* Selected seats */}
-          <div className="p-5 border-b border-[#2A2A2A]">
-            <div className="flex items-center gap-1.5 mb-3">
+          <div className="p-4 md:p-5 border-b border-[#2A2A2A] max-h-[150px] overflow-auto">
+            <div className="flex items-center gap-1.5 mb-2 md:mb-3">
               <Info className="w-3.5 h-3.5 text-gray-500" />
               <span className="text-gray-400 text-sm">Ghế đã chọn</span>
             </div>
-            {selectedSeats.length === 0 ? (
+            {selectedSeatObjects.length === 0 ? (
               <p className="text-gray-600 text-sm italic">Chưa chọn ghế nào</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {selectedSeats.sort().map(seat => {
-                  const isVip = VIP_ROWS.includes(seat[0]);
+                {selectedSeatObjects.map(seat => {
+                  const isVip = seat.TENLOAI === 'VIP' || seat.MALOAIGHE === 'LG002';
                   return (
-                    <span
-                      key={seat}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
-                        isVip
-                          ? 'bg-[#F5C518]/15 border border-[#F5C518]/40 text-[#F5C518]'
-                          : 'bg-[#252525] border border-[#3A3A3A] text-white'
+                    <span key={seat.MAGHE} className={`px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-xs md:text-sm font-bold ${
+                        isVip ? 'bg-[#F5C518]/15 border border-[#F5C518]/40 text-[#F5C518]' : 'bg-[#252525] border border-[#3A3A3A] text-white'
                       }`}
                     >
-                      {seat}
-                      {isVip && <span className="ml-1 text-[10px]">VIP</span>}
+                      {seat.TENGHE}
+                      {isVip && <span className="ml-1 text-[9px] md:text-[10px]">VIP</span>}
                     </span>
                   );
                 })}
@@ -276,54 +321,26 @@ export const SeatMapScreen = () => {
             )}
           </div>
 
-          {/* Price breakdown */}
-          <div className="p-5 border-b border-[#2A2A2A] space-y-3">
-            <h4 className="text-gray-400 text-sm">Chi tiết thanh toán</h4>
-            {selectedSeats.map(seat => {
-              const isVip = VIP_ROWS.includes(seat[0]);
-              const price = isVip ? 110000 : 85000;
-              return (
-                <div key={seat} className="flex justify-between text-sm">
-                  <span className="text-gray-500">
-                    Ghế {seat} {isVip ? '(VIP)' : '(Thường)'}
-                  </span>
-                  <span className="text-gray-300">{formatCurrency(price)}</span>
-                </div>
-              );
-            })}
-            {selectedSeats.length > 0 && (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Phí dịch vụ (5%)</span>
-                  <span className="text-gray-300">{formatCurrency(serviceFee)}</span>
-                </div>
-                <div className="h-px bg-[#2A2A2A]" />
-              </>
-            )}
+          <div className="p-4 md:p-5 bg-gradient-to-t from-[#161616] to-transparent mt-auto space-y-2 md:space-y-3">
             <div className="flex justify-between">
-              <span className="text-white font-semibold">Tổng cộng</span>
-              <span className="text-[#F5C518] font-bold text-lg">{formatCurrency(grandTotal)}</span>
+              <span className="text-white font-semibold text-sm md:text-base">Tổng cộng</span>
+              <span className="text-[#F5C518] font-bold text-base md:text-lg">{formatCurrency(grandTotal)}</span>
             </div>
-          </div>
-
-          {/* CTA */}
-          <div className="p-5 mt-auto">
             <button
-              disabled={selectedSeats.length === 0}
-              onClick={() => navigate('/checkout')}
-              className={`w-full py-4 rounded-xl font-bold text-base transition-all ${
-                selectedSeats.length > 0
-                  ? 'bg-[#E50914] hover:bg-[#C40812] text-white shadow-lg shadow-red-900/30 active:scale-[0.98]'
+              // Sửa disabled: thêm điều kiện isHolding để tránh khách bấm liên tục
+              disabled={selectedSeats.length === 0 || isHolding}
+
+              // Sửa onClick: gọi hàm handleContinue thay vì navigate trực tiếp
+              onClick={handleContinue}
+
+              className={`w-full py-3 md:py-4 rounded-xl font-bold text-sm md:text-base transition-all ${selectedSeats.length > 0 && !isHolding
+                  ? 'bg-[#E50914] hover:bg-[#C40812] text-white shadow-lg shadow-red-900/30'
                   : 'bg-[#2A2A2A] text-gray-600 cursor-not-allowed'
-              }`}
+                }`}
             >
-              {selectedSeats.length === 0 ? 'Chọn ghế để tiếp tục' : 'Tiếp tục thanh toán →'}
+              {/* Hiển thị text linh hoạt theo trạng thái */}
+              {isHolding ? 'Đang khóa ghế...' : (selectedSeats.length === 0 ? 'Chọn ghế để tiếp tục' : 'Tiếp tục thanh toán →')}
             </button>
-            {selectedSeats.length > 0 && (
-              <p className="text-center text-gray-600 text-xs mt-2">
-                {selectedSeats.length} ghế · Tổng {formatCurrency(grandTotal)}
-              </p>
-            )}
           </div>
         </div>
       </div>

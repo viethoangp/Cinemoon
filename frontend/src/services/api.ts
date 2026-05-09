@@ -264,6 +264,21 @@ export const bookingAPI = {
       body: JSON.stringify({ makhuyenmai, totalAmount }),
     });
   },
+  holdSeats: async (masuat: string, seatIds: string[], token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập để tiếp tục.');
+    }
+
+    return fetchAPI('/booking/hold', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ masuat, seatIds }),
+    });
+}
 };
 
 // Export types

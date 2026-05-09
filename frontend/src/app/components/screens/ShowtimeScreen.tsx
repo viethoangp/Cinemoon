@@ -61,6 +61,7 @@ export const ShowtimeScreen = () => {
     setSelectedDate,
     setSelectedCinema,
     setSelectedSuatChieu,
+    clearSelectedSeats,
     fetchMovies,
     cinemas,
     loadingCinemas,
@@ -116,6 +117,7 @@ useEffect(() => {
     setSelectedDate(activeDate);
     setSelectedCinema(activeCinema);
     setSelectedSuatChieu(showtime); // Store full object for SeatMapScreen
+    clearSelectedSeats();
     navigate('/seat');
   };
 
