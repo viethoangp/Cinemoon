@@ -1,6 +1,6 @@
 # 🎬 CINEMOON - Hệ thống Đặt Vé Xem Phim
 
-Cinemoon là một ứng dụng web đặt vé xem phim được xây dựng với:
+Cinemoon là một ứng dụng web đặt vé xem phim toàn phần (Full-Stack) được xây dựng với:
 - **Frontend**: React.js + TypeScript + TailwindCSS
 - **Backend**: Node.js + Express.js + Oracle Database
 - **Database**: Oracle 16 với 16 bảng, Stored Procedures, Triggers
@@ -177,21 +177,13 @@ Cinemoon/
 4. **Chỉnh sửa `.env` với thông tin Oracle của bạn**
    ```env
    PORT=3000
-   CORS_ORIGIN=http://localhost:5173,http://localhost:5174
-
-   # Oracle Database
-   ORACLE_USER=your_username
-   ORACLE_PASSWORD=your_password
-   ORACLE_CONNECTION_STRING=localhost:1521/XE
-
-   # Connection Pool
+   CORS_ORIGIN=http://localhost:5173
+   ORACLE_USER=username
+   ORACLE_PASSWORD=pw
+   ORACLE_CONNECTION_STRING=localhost:1521/pdb
    ORACLE_POOL_MIN=1
    ORACLE_POOL_MAX=10
-   ORACLE_POOL_INCREMENT=1
-
-   # JWT
-   JWT_SECRET=cinemoon-secret-key-2026
-   JWT_EXPIRY=7d
+   ORACLE_POOL_INCREMENT=1 
    ```
 
 5. **Chạy backend development server**
