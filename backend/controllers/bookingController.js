@@ -17,8 +17,19 @@ export async function holdSeat(req, res) {
   try {
     const { masuat, seatIds, matk } = req.body;
 
+    // DEBUG: Log dữ liệu nhận được
+    console.log('[holdSeat Controller] Dữ liệu nhận được:', {
+      body: req.body,
+      masuat,
+      seatIds,
+      matk,
+      req_user: req.user,
+      MATK_from_token: req.user?.MATK,
+    });
+
     // Validate required fields
     if (!masuat || !seatIds || !Array.isArray(seatIds) || seatIds.length === 0) {
+      console.error('[holdSeat Controller] Validation failed:', { masuat, seatIds, isArray: Array.isArray(seatIds) });
       return res.status(400).json(
         buildResponse(false, 'Thiếu thông tin: masuat, seatIds (array)')
       );
@@ -27,9 +38,11 @@ export async function holdSeat(req, res) {
     // Use authenticated user ID if not provided
     const userId = matk || req.user?.MATK;
     if (!userId) {
+      console.error('[holdSeat Controller] Không có userId');
       return res.status(401).json(buildResponse(false, 'Chưa xác thực.'));
     }
 
+    console.log('[holdSeat Controller] Gọi holdSeats service với:', { masuat, seatIds, userId });
     const result = await holdSeats(masuat, seatIds, userId);
 
     if (!result.success) {

@@ -21,7 +21,7 @@ export async function calculatePrice(maloaighe, maloaikhach, ngaychieu, giobatda
       FROM DUAL
     `;
 
-    const dayResults = await executeQuery(dayQuery, [ngaychieu, ngaychieu]);
+    const dayResults = await executeQuery(dayQuery, { ngaychieu });
     if (!dayResults || dayResults.length === 0) {
       throw new Error('Không thể tính ngày chiếu.');
     }
@@ -35,16 +35,16 @@ export async function calculatePrice(maloaighe, maloaikhach, ngaychieu, giobatda
       WHERE qdg.MALOAIGHE = :maloaighe
         AND qdg.MALOAIKHACH = :maloaikhach
         AND qdg.THU = :thu
-        AND :giobatdau BETWEEN qdg.GIOBATDAU AND qdg.GIOKETTHUC
+        AND TO_DATE(:giobatdau, 'HH24:MI') BETWEEN TO_DATE(qdg.GIOBATDAU, 'HH24:MI') AND TO_DATE(qdg.GIOKETTHUC, 'HH24:MI')
       ORDER BY qdg.DONGIA DESC
     `;
 
-    const results = await executeQuery(query, [
+    const results = await executeQuery(query, {
       maloaighe,
       maloaikhach,
-      thuChieu,
-      timeNormalized,
-    ]);
+      thu: thuChieu,
+      giobatdau: timeNormalized,
+    });
 
     if (results.length === 0) {
       throw new Error('Không tìm thấy quy định giá phù hợp.');
@@ -108,7 +108,9 @@ export async function validateAndApplyVoucher(makhuyenmai, totalAmount) {
 export async function holdSeats(masuat, seatIds, userId) {
   let connection;
   try {
+    console.log('[holdSeats Service] START - Input:', { masuat, seatIds, userId });
     connection = await getConnection();
+    
     // BƯỚC 0: NGƯỜI QUÉT DỌN (TỰ ĐỘNG GIẢI PHÓNG GHẾ HẾT HẠN)
     // Xóa tất cả các ghế của suất chiếu này đã quá 15 phút mà chưa thanh toán
     const cleanupQuery = `
@@ -117,7 +119,8 @@ export async function holdSeats(masuat, seatIds, userId) {
         AND TRANGTHAICHO = 'Held' 
         AND GIUDEN < CURRENT_TIMESTAMP
     `;
-    await connection.execute(cleanupQuery, { masuat });
+    const cleanupResult = await connection.execute(cleanupQuery, { masuat });
+    console.log('[holdSeats Service] Cleanup result - Deleted expired holds:', cleanupResult.rowsAffected);
     // Bước 1: Kiểm tra suất chiếu
     const checkQuery = `
       SELECT sc.MASUAT, sc.MAPHIM, sc.MAPHONG, sc.TRANGTHAISUAT
@@ -126,7 +129,10 @@ export async function holdSeats(masuat, seatIds, userId) {
     `;
 
     const checkResult = await connection.execute(checkQuery, { masuat });
+    console.log('[holdSeats Service] Showtime check result:', { rows: checkResult.rows?.length, checkResult });
+    
     if (!checkResult.rows || checkResult.rows.length === 0) {
+      console.error('[holdSeats Service] Suất chiếu không tồn tại:', masuat);
       return { success: false, message: 'Suất chiếu không tồn tại.' };
     }
 
@@ -135,8 +141,11 @@ export async function holdSeats(masuat, seatIds, userId) {
     const phongId = showtime.MAPHONG || showtime[2];
     const trangThaiSuat = showtime.TRANGTHAISUAT || showtime[3];
 
-    if (trangThaiSuat !== 'Showing') {
-      return { success: false, message: 'Suất chiếu không khả dụng để đặt vé.' };
+    console.log('[holdSeats Service] Extracted showtime info:', { suatId, phongId, trangThaiSuat });
+
+
+    if (trangThaiSuat !== 'Showing' && trangThaiSuat !== 'Upcoming') {
+      return { success: false, message: 'Suất chiếu đã kết thúc hoặc không khả dụng để đặt vé.' };
     }
 
     // Bước 2: Lock ghế chống giành giật
@@ -145,6 +154,8 @@ export async function holdSeats(masuat, seatIds, userId) {
     seatIds.forEach((id, i) => {
       seatParams[`seat${i}`] = id;
     });
+
+    console.log('[holdSeats Service] Locking seats with query:', { seatIdList, seatParams });
 
     const lockQuery = `
       SELECT MAGHE, MAPHONG, MALOAIGHE, VITRI
@@ -156,7 +167,10 @@ export async function holdSeats(masuat, seatIds, userId) {
 
     try {
       const lockResult = await connection.execute(lockQuery, seatParams);
+      console.log('[holdSeats Service] Lock result:', { rowsAffected: lockResult.rowsAffected, rows: lockResult.rows?.length });
+      
       if (!lockResult.rows || lockResult.rows.length !== seatIds.length) {
+        console.error('[holdSeats Service] Seat mismatch:', { requested: seatIds.length, found: lockResult.rows?.length });
         return { success: false, message: 'Một số ghế không tồn tại trong phòng.' };
       }
 
@@ -164,11 +178,14 @@ export async function holdSeats(masuat, seatIds, userId) {
       // Tạo mã GD ngẫu nhiên theo chuẩn (VD: GD_8943_123)
       const maGD = `GD_${Date.now().toString().slice(-4)}_${Math.floor(Math.random()*1000)}`;
       
+      console.log('[holdSeats Service] Creating transaction with maGD:', maGD);
+      
       const insertGdQuery = `
         INSERT INTO GIAO_DICH (MAGD, THOIGIANTAO, TONGTIEN, TRANGTHAIGD)
         VALUES (:magd, CURRENT_TIMESTAMP, 0, 'Pending')
       `;
-      await connection.execute(insertGdQuery, { magd: maGD });
+      const gdResult = await connection.execute(insertGdQuery, { magd: maGD });
+      console.log('[holdSeats Service] Transaction created:', { maGD, rowsAffected: gdResult.rowsAffected });
 
       // BƯỚC 4: LƯU GHẾ VÀO DAT_CHO VỚI MÃ GIAO DỊCH VỪA TẠO
       const heldSeats = [];
@@ -179,27 +196,31 @@ export async function holdSeats(masuat, seatIds, userId) {
         `;
 
         try {
-          await connection.execute(insertQuery, {
+          const result = await connection.execute(insertQuery, {
             masuat: suatId,
             maghe: seatId,
-            magd: maGD // Truyền mã giao dịch thật vào
+            magd: maGD
           });
+          console.log(`[holdSeats Service] Held seat ${seatId}: ${result.rowsAffected} row(s) inserted`);
           heldSeats.push(seatId);
         } catch (err) {
           if (err.errorNum === 1 || (err.message && err.message.includes('ORA-00001'))) {
-            console.log(`Ghế ${seatId} đã bị giữ trong bảng DAT_CHO.`);
+            console.log(`[holdSeats Service] Ghế ${seatId} đã bị giữ trong bảng DAT_CHO.`);
           } else {
+            console.error(`[holdSeats Service] Error inserting seat ${seatId}:`, err);
             throw err;
           }
         }
       }
 
       if (heldSeats.length === 0) {
+        console.error('[holdSeats Service] Không thể giữ bất kỳ ghế nào');
         return { success: false, message: 'Không thể giữ ghế.' };
       }
 
       // Lưu tất cả thay đổi xuống Database
       await connection.commit();
+      console.log('[holdSeats Service] Commit successful. Held seats:', heldSeats);
 
       return {
         success: true,
@@ -207,29 +228,43 @@ export async function holdSeats(masuat, seatIds, userId) {
         data: { 
           masuat: suatId, 
           heldSeats,
-          magd: maGD // Trả cái mã này lên Frontend để lát sang trang Checkout dùng
+          magd: maGD
         }
       };
       
     } catch (lockError) {
+      console.error('[holdSeats Service] Lock error:', { errorNum: lockError.errorNum, message: lockError.message });
       if (lockError.errorNum === 54 || (lockError.message && lockError.message.includes('ORA-00054'))) {
+        console.error('[holdSeats Service] ORA-00054 - Lock conflict');
         return {
           success: false,
           message: 'Ghế bạn chọn vừa có người khác giữ. Vui lòng chọn ghế khác!',
           errorCode: 'ORA-00054',
         };
       }
+      console.error('[holdSeats Service] Unexpected lock error:', lockError);
       throw lockError;
     }
   } catch (error) {
+    console.error('[holdSeats Service] Outer catch - Error:', { message: error.message, errorNum: error.errorNum });
     if (connection) {
-      try { await connection.rollback(); } catch (rbErr) {}
+      try { 
+        await connection.rollback();
+        console.log('[holdSeats Service] Rollback successful');
+      } catch (rbErr) {
+        console.error('[holdSeats Service] Rollback error:', rbErr);
+      }
     }
-    console.error('Lỗi holdSeats:', error);
+    console.error('[holdSeats Service] Lỗi holdSeats:', error);
     throw error; 
   } finally {
     if (connection) {
-      try { await connection.close(); } catch (closeErr) {}
+      try { 
+        await connection.close();
+        console.log('[holdSeats Service] Connection closed');
+      } catch (closeErr) {
+        console.error('[holdSeats Service] Close error:', closeErr);
+      }
     }
   }
 }
