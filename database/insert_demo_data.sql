@@ -176,51 +176,125 @@ INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPH
 VALUES ('PHIM003', 'Đào, Phở và Piano', 'History', 100, 'Phi Tiến Sơn', 'Doãn Quốc Đam, Cao Thùy Linh', TO_DATE('2024-02-10', 'YYYY-MM-DD'), '/img/poster-daopho.jpg', 'https://www.youtube.com/watch?v=c-ASaavjtPw', 'Câu chuyện tình yêu lãng mạn giữa bom đạn Hà Nội mùa đông 1946.', 13, 'Showing');
 
 INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
-VALUES ('PHIM004', 'Hai Muối', 'Drama', 110, 'Vũ Thành Vinh', 'Quyền Linh, Bảo Ngọc', TO_DATE('2024-08-30', 'YYYY-MM-DD'), '/img/poster-haimuoi.jpg', 'https://www.youtube.com/watch?v=VmJ4oB3Xguo', 'Câu chuyện về tình cha con đầy xúc động ở ấp đảo Thiềng Liềng.', 13, 'Upcoming');
+VALUES ('PHIM004', 'Hai Muối', 'Drama', 110, 'Vũ Thành Vinh', 'Quyền Linh, Bảo Ngọc', TO_DATE('2024-08-30', 'YYYY-MM-DD'), '/img/poster-haimuoi.jpg', 'https://www.youtube.com/watch?v=VmJ4oB3Xguo', 'Câu chuyện về tình cha con đầy xúc động ở ấp đảo Thiềng Liềng.', 13, 'Showing');
 INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
-VALUES ('PHIM005', 'Mắt Biếc', 'Romance', 117, 'Victor Vũ', 'Trần Nghĩa, Trúc Anh', TO_DATE('2019-12-20', 'YYYY-MM-DD'), '/img/poster-matbiec.jpg', 'https://www.youtube.com/watch?v=ITlQ0oU7tDA', 'Chuyện tình đơn phương đẫm nước mắt của Ngạn dành cho Hà Lan.', 16, 'Upcoming');
+VALUES ('PHIM005', 'Mắt Biếc', 'Romance', 117, 'Victor Vũ', 'Trần Nghĩa, Trúc Anh', TO_DATE('2019-12-20', 'YYYY-MM-DD'), '/img/poster-matbiec.jpg', 'https://www.youtube.com/watch?v=ITlQ0oU7tDA', 'Chuyện tình đơn phương đẫm nước mắt của Ngạn dành cho Hà Lan.', 16, 'Showing');
 
 INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
-VALUES ('PHIM006', 'Bố Già', 'Family', 128, 'Trấn Thành', 'Trấn Thành, Tuấn Trần', TO_DATE('2021-03-12', 'YYYY-MM-DD'), '/img/poster-bogia.jpg', 'https://www.youtube.com/watch?v=jluSu8Rw6YE', 'Câu chuyện đời thường, cảm động về tình cha con trong một xóm lao động nghèo.', 13, 'Upcoming');
+VALUES ('PHIM006', 'Bố Già', 'Family', 128, 'Trấn Thành', 'Trấn Thành, Tuấn Trần', TO_DATE('2021-03-12', 'YYYY-MM-DD'), '/img/poster-bogia.jpg', 'https://www.youtube.com/watch?v=jluSu8Rw6YE', 'Câu chuyện đời thường, cảm động về tình cha con trong một xóm lao động nghèo.', 13, 'Showing');
+INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
+VALUES ('PHIM007', 'Kính Vạn Hoa', 'Family', 110, 'Võ Thanh Hòa', 'Hùng Thuận, Ngọc Trai', TO_DATE('2026-12-20', 'YYYY-MM-DD'), '/img/poster-kinhvanhoa.jpg', 'https://www.youtube.com/watch?v=fVYmwHdEFcU', 'Bộ phim chuyển thể từ tác phẩm kinh điển của nhà văn Nguyễn Nhật Ánh, đưa người xem trở về tuổi thơ.', 13, 'Upcoming');
+
+INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
+VALUES ('PHIM008', 'Linh Miêu', 'Horror', 105, 'Trần Hữu Tấn', 'Hồng Đào, Thùy Tiên', TO_DATE('2026-10-31', 'YYYY-MM-DD'), '/img/poster-linhmieu.jpg', 'https://www.youtube.com/watch?v=8l4crgVt36Y', 'Câu chuyện kinh dị rùng rợn mang đậm chất dân gian về truyền thuyết linh miêu.', 18, 'Upcoming');
+
+INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN, NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
+VALUES ('PHIM009', 'Địa Đạo', 'History', 125, 'Bùi Thạc Chuyên', 'Thái Hòa, Quang Tuấn', TO_DATE('2026-09-02', 'YYYY-MM-DD'), '/img/poster-diadao.jpg', 'https://www.youtube.com/watch?v=xh6IDHjvytU', 'Khúc tráng ca hào hùng về những người anh hùng chiến đấu dưới lòng đất thép.', 16, 'Upcoming');
 COMMIT;
 
 -- 8. QUY_DINH_GIA
-INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
-VALUES ('QDG001', 'LG001', 'LK001', 2, 0, '10:00', '16:00', 75000, 1.0);
-INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
-VALUES ('QDG002', 'LG001', 'LK002', 2, 0, '10:00', '16:00', 60000, 0.8);
-INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
-VALUES ('QDG003', 'LG002', 'LK001', 3, 1, '16:00', '23:59', 120000, 1.2);
-INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
-VALUES ('QDG004', 'LG002', 'LK002', 3, 1, '16:00', '23:59', 100000, 1.0);
-INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
-VALUES ('QDG005', 'LG003', 'LK001', 5, 0, '18:00', '23:59', 150000, 1.3);
-INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
-VALUES ('QDG006', 'LG003', 'LK002', 5, 0, '18:00', '23:59', 130000, 1.15);
-COMMIT;
+BEGIN
+  -- 1. 
+
+  -- 2. Vòng lặp nạp giá cho 7 ngày trong tuần (Thứ 2 - Chủ Nhật)
+  FOR d IN 2..8 LOOP 
+    -- KHUNG GIỜ SÁNG (08:00 - 12:00)
+    INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
+    VALUES ('QD_'||d||'_AM_STD', 'LG001', 'LK001', d, 0, '08:00', '12:00', 75000, 1.0);
+    
+    INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
+    VALUES ('QD_'||d||'_AM_VIP', 'LG002', 'LK001', d, 0, '08:00', '12:00', 95000, 1.0);
+
+    -- KHUNG GIỜ VÀNG (12:00 - 22:00)
+    -- Tăng giá nhẹ cho Thứ 7 và Chủ Nhật (d >= 7)
+    INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
+    VALUES ('QD_'||d||'_PM_STD', 'LG001', 'LK001', d, 0, '12:00', '22:00', CASE WHEN d >= 7 THEN 95000 ELSE 85000 END, 1.0);
+    
+    INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
+    VALUES ('QD_'||d||'_PM_VIP', 'LG002', 'LK001', d, 0, '12:00', '22:00', CASE WHEN d >= 7 THEN 120000 ELSE 110000 END, 1.0);
+
+    -- KHUNG GIỜ KHUYA (22:00 - 23:59)
+    INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
+    VALUES ('QD_'||d||'_NT_STD', 'LG001', 'LK001', d, 0, '22:00', '23:59', 80000, 1.0);
+    
+    INSERT INTO QUY_DINH_GIA (MAQUYDINH, MALOAIGHE, MALOAIKHACH, THU, APDUNGNGAYLE, GIOBATDAU, GIOKETTHUC, DONGIA, HESONHAN)
+    VALUES ('QD_'||d||'_NT_VIP', 'LG002', 'LK001', d, 0, '22:00', '23:59', 105000, 1.0);
+  END LOOP;
+
+  -- 3. Chốt giao dịch
+  COMMIT;
+END;
+/
 
 -- 9. SUAT_CHIEU
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC001', 'PHIM001', 'PC001', TO_DATE('2026-05-10', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-10 10:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-10 12:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Showing');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC002', 'PHIM001', 'PC001', TO_DATE('2026-05-10', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-10 13:30:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-10 15:30:00', 'YYYY-MM-DD HH24:MI:SS'), 'Showing');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC003', 'PHIM001', 'PC001', TO_DATE('2026-05-10', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-10 16:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-10 18:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'Showing');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC004', 'PHIM002', 'PC002', TO_DATE('2026-05-10', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-10 19:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-10 20:55:00', 'YYYY-MM-DD HH24:MI:SS'), 'Showing');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC005', 'PHIM002', 'PC002', TO_DATE('2026-05-11', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-11 14:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-11 15:55:00', 'YYYY-MM-DD HH24:MI:SS'), 'Upcoming');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC006', 'PHIM003', 'PC003', TO_DATE('2026-05-11', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-11 10:30:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-11 12:15:00', 'YYYY-MM-DD HH24:MI:SS'), 'Upcoming');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC007', 'PHIM003', 'PC003', TO_DATE('2026-05-11', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-11 17:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-11 18:45:00', 'YYYY-MM-DD HH24:MI:SS'), 'Upcoming');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC008', 'PHIM004', 'PC004', TO_DATE('2026-05-12', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-12 15:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-12 16:50:00', 'YYYY-MM-DD HH24:MI:SS'), 'Upcoming');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC009', 'PHIM004', 'PC004', TO_DATE('2026-05-12', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-12 19:30:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-12 21:20:00', 'YYYY-MM-DD HH24:MI:SS'), 'Upcoming');
-INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
-VALUES ('SC010', 'PHIM002', 'PC001', TO_DATE('2026-05-12', 'YYYY-MM-DD'), TO_TIMESTAMP('2026-05-12 22:00:00', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('2026-05-12 23:55:00', 'YYYY-MM-DD HH24:MI:SS'), 'Upcoming');
-COMMIT;
+-- =================================================================
+-- TỰ ĐỘNG PHÁT SINH LỊCH CHIẾU TỪ 11/05/2026 ĐẾN 31/05/2026
+-- =================================================================
+DECLARE
+    v_date DATE;
+    v_masuat VARCHAR2(10);
+    v_maphim VARCHAR2(10);
+    v_maphong VARCHAR2(10);
+    v_giobatdau TIMESTAMP;
+    v_gioketthuc TIMESTAMP;
+    v_counter NUMBER := 1; 
+    v_movie_idx NUMBER;
+    v_room_idx NUMBER;
+BEGIN
+    -- Vòng lặp chạy 21 ngày (Từ 11/05 đến 31/05)
+    FOR d IN 0..20 LOOP 
+        v_date := TO_DATE('2026-05-11', 'YYYY-MM-DD') + d;
+        
+        -- Mỗi ngày 5 suất chiếu
+        FOR s IN 1..5 LOOP
+            v_masuat := 'SC' || LPAD(v_counter, 3, '0');
+            
+            -- THUẬT TOÁN XOAY VÒNG (ROUND-ROBIN)
+            -- Lấy ngày (d) cộng với ca chiếu (s) rồi chia lấy dư để ra chỉ mục phim và phòng
+            v_movie_idx := MOD(d + s, 5); -- Ra kết quả từ 0 đến 4
+            v_room_idx := MOD(d + s, 4) + 1; -- Ra kết quả từ 1 đến 4
+            
+            -- 1. Tự động đổi Phim mỗi ngày
+            IF v_movie_idx = 0 THEN v_maphim := 'PHIM001';      -- Mai
+            ELSIF v_movie_idx = 1 THEN v_maphim := 'PHIM004';   -- Hai Muối
+            ELSIF v_movie_idx = 2 THEN v_maphim := 'PHIM007';   -- Kính Vạn Hoa
+            ELSIF v_movie_idx = 3 THEN v_maphim := 'PHIM008';   -- Linh Miêu
+            ELSE v_maphim := 'PHIM009';                         -- Địa Đạo
+            END IF;
+            
+            -- 2. Tự động đổi Phòng chiếu (PC001 -> PC004)
+            v_maphong := 'PC00' || v_room_idx;
+            
+            -- 3. Khung giờ vẫn giữ cố định để các ca chiếu không bao giờ đè lên nhau (Tránh Trigger báo lỗi)
+            IF s = 1 THEN
+                v_giobatdau := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 09:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                v_gioketthuc := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 11:30:00', 'YYYY-MM-DD HH24:MI:SS');
+            ELSIF s = 2 THEN
+                v_giobatdau := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 13:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                v_gioketthuc := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 15:30:00', 'YYYY-MM-DD HH24:MI:SS');
+            ELSIF s = 3 THEN
+                v_giobatdau := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 16:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                v_gioketthuc := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 18:30:00', 'YYYY-MM-DD HH24:MI:SS');
+            ELSIF s = 4 THEN
+                v_giobatdau := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 19:30:00', 'YYYY-MM-DD HH24:MI:SS');
+                v_gioketthuc := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 21:45:00', 'YYYY-MM-DD HH24:MI:SS');
+            ELSE
+                v_giobatdau := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 22:30:00', 'YYYY-MM-DD HH24:MI:SS');
+                v_gioketthuc := TO_TIMESTAMP(TO_CHAR(v_date, 'YYYY-MM-DD') || ' 23:59:00', 'YYYY-MM-DD HH24:MI:SS');
+            END IF;
+            
+            -- Insert vào DB
+            INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
+            VALUES (v_masuat, v_maphim, v_maphong, v_date, v_giobatdau, v_gioketthuc, 'Showing');
+            
+            v_counter := v_counter + 1;
+        END LOOP;
+    END LOOP;
+    
+    COMMIT;
+    
+END;
+/
 
 -- 10. KHUYEN_MAI
 INSERT INTO KHUYEN_MAI (MAKHUYENMAI, TENCHUONGTRINH, GIATRIGIAM, DIEUKIENAPDUNG, NGAYBATDAU, NGAYKETTHUC)
@@ -246,51 +320,40 @@ COMMIT;
 -- ==========================================
 -- RESET 12 SEQUENCE DANH MỤC THEO SỐ LƯỢNG THỰC TẾ
 -- ==========================================
+DECLARE
+    PROCEDURE recreate_seq(seq_name IN VARCHAR2, start_val IN NUMBER) IS
+    BEGIN
+        -- Thử xóa Sequence cũ
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP SEQUENCE ' || seq_name;
+        EXCEPTION WHEN OTHERS THEN
+            -- Nếu lỗi là do Sequence chưa tồn tại (ORA-02289) thì bỏ qua vui vẻ
+            IF SQLCODE != -2289 THEN RAISE; END IF; 
+        END;
+        
+        -- Tạo lại Sequence mới với giá trị bắt đầu chuẩn xác
+        EXECUTE IMMEDIATE 'CREATE SEQUENCE ' || seq_name || ' START WITH ' || start_val || ' INCREMENT BY 1';
+    END;
+BEGIN
+    recreate_seq('SEQ_THAMSO', 4);
+    recreate_seq('SEQ_LK', 5);
+    recreate_seq('SEQ_LG', 4);
+    recreate_seq('SEQ_RAP', 3);
+    recreate_seq('SEQ_PHONG', 5);
+    recreate_seq('SEQ_GHE', 121);
+    recreate_seq('SEQ_PHIM', 10);
+    recreate_seq('SEQ_QDG', 43); 
+    recreate_seq('SEQ_SC', 106); 
+    recreate_seq('SEQ_KM', 3);
+    recreate_seq('SEQ_TK', 3);
+    recreate_seq('SEQ_KH', 3);
+    
+    -- Các bảng Giao Dịch trống thì bắt đầu từ 1
+    recreate_seq('SEQ_GD', 1);
+    recreate_seq('SEQ_VE', 1);
+    recreate_seq('SEQ_TT', 1);
 
--- 1. Tham số (Đã có 3 dòng -> Bắt đầu từ 4)
-DROP SEQUENCE SEQ_THAMSO; CREATE SEQUENCE SEQ_THAMSO START WITH 4 INCREMENT BY 1;
-
--- 2. Loại Khách (Đã có 4 dòng -> Bắt đầu từ 5)
-DROP SEQUENCE SEQ_LK;     CREATE SEQUENCE SEQ_LK START WITH 5 INCREMENT BY 1;
-
--- 3. Loại Ghế (Đã có 3 dòng -> Bắt đầu từ 4)
-DROP SEQUENCE SEQ_LG;     CREATE SEQUENCE SEQ_LG START WITH 4 INCREMENT BY 1;
-
--- 4. Rạp chiếu (Đã có 2 dòng -> Bắt đầu từ 3)
-DROP SEQUENCE SEQ_RAP;    CREATE SEQUENCE SEQ_RAP START WITH 3 INCREMENT BY 1;
-
--- 5. Phòng chiếu (Đã có 4 dòng -> Bắt đầu từ 5)
-DROP SEQUENCE SEQ_PHONG;  CREATE SEQUENCE SEQ_PHONG START WITH 5 INCREMENT BY 1;
-
--- 6. Ghế ngồi (Đã có 120 dòng từ G001 đến G120 -> Bắt đầu từ 121)
-DROP SEQUENCE SEQ_GHE;    CREATE SEQUENCE SEQ_GHE START WITH 121 INCREMENT BY 1;
-
--- 7. Phim (Đã có 6 dòng -> Bắt đầu từ 7)
-DROP SEQUENCE SEQ_PHIM;   CREATE SEQUENCE SEQ_PHIM START WITH 7 INCREMENT BY 1;
-
--- 8. Quy định giá (Đã có 6 dòng -> Bắt đầu từ 7)
-DROP SEQUENCE SEQ_QDG;    CREATE SEQUENCE SEQ_QDG START WITH 7 INCREMENT BY 1;
-
--- 9. Suất chiếu (Đã có 10 dòng -> Bắt đầu từ 11)
-DROP SEQUENCE SEQ_SC;     CREATE SEQUENCE SEQ_SC START WITH 11 INCREMENT BY 1;
-
--- 10. Khuyến mãi (Đã có 2 dòng -> Bắt đầu từ 3)
-DROP SEQUENCE SEQ_KM;     CREATE SEQUENCE SEQ_KM START WITH 3 INCREMENT BY 1;
-
--- 11. Tài khoản (Đã có 2 dòng -> Bắt đầu từ 3)
-DROP SEQUENCE SEQ_TK;     CREATE SEQUENCE SEQ_TK START WITH 3 INCREMENT BY 1;
-
--- 12. Khách hàng (Đã có 2 dòng -> Bắt đầu từ 3)
-DROP SEQUENCE SEQ_KH;     CREATE SEQUENCE SEQ_KH START WITH 3 INCREMENT BY 1;
-
-
--- ==========================================
--- RESET 3 SEQUENCE GIAO DỊCH (BẢNG TRỐNG)
--- ==========================================
--- Vì 4 bảng giao dịch (Giao dịch, Đặt chỗ, Vé, Thanh toán) hiện tại 
--- KHÔNG CÓ dữ liệu mồi, nên chúng ta cho chúng bắt đầu từ số 1.
-DROP SEQUENCE SEQ_GD;     CREATE SEQUENCE SEQ_GD START WITH 1 INCREMENT BY 1;
-DROP SEQUENCE SEQ_VE;     CREATE SEQUENCE SEQ_VE START WITH 1 INCREMENT BY 1;
-DROP SEQUENCE SEQ_TT;     CREATE SEQUENCE SEQ_TT START WITH 1 INCREMENT BY 1;
+END;
+/
 
 
