@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronLeft, Tag, Check, AlertCircle, Film, MapPin, Clock, Ticket, QrCode } from 'lucide-react';
+import { ChevronLeft, Tag, Check, AlertCircle, Film, MapPin, Clock, Ticket, Loader, QrCode } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { bookingAPI, catalogAPI } from '../../../services/api';
+import { getToken } from '../../../utils/token';
 
 const VIP_ROWS = ['D', 'E', 'F'];
+
 const formatCurrency = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 
 const PAYMENT_METHODS = [
@@ -14,57 +17,295 @@ const PAYMENT_METHODS = [
   { id: 'cash', name: 'Tiền mặt tại quầy', icon: '💵', desc: 'Thanh toán trực tiếp tại rạp' },
 ];
 
-const PROMOS: Record<string, number> = {
-  'CINEMOON25': 25,
-  'VIP50': 50,
-  'NEWMEMBER': 20,
-};
-
 const formatDateLabel = (iso: string) => {
   if (!iso) return 'Hôm nay';
   const d = new Date(iso);
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 };
 
+interface PriceData {
+  ticketTotal: number;
+  serviceFee: number;
+  discount: number;
+  grandTotal: number;
+}
+
+interface ApiSeat {
+  MAGHE: string;
+  TENGHE: string;
+  MALOAIGHE: string;
+  TRANGTHAI: string;
+  TENLOAI: string;
+}
+
 export const CheckoutScreen = () => {
   const navigate = useNavigate();
-  const { selectedMovie, selectedSeats, selectedShowtime, selectedDate, selectedCinema } = useApp();
+  const { selectedMovie, selectedSeats, selectedShowtime, selectedDate, selectedCinema, selectedSuatChieu } = useApp();
 
+  // UI State
   const [paymentMethod, setPaymentMethod] = useState('momo');
   const [promoCode, setPromoCode] = useState('');
-  const [promoApplied, setPromoApplied] = useState<number | null>(null);
+  
+  // Pricing State
+  const [priceData, setPriceData] = useState<PriceData>({
+    ticketTotal: 0,
+    serviceFee: 0,
+    discount: 0,
+    grandTotal: 0,
+  });
+  const [roomSeats, setRoomSeats] = useState<ApiSeat[]>([]);
+  
+  // API Loading States
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [isLoadingSeats, setIsLoadingSeats] = useState(false);
+  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Error States
+  const [priceError, setPriceError] = useState('');
   const [promoError, setPromoError] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  
+  // Success State
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [bookingId, setBookingId] = useState<string | null>(null);
 
-  const ticketTotal = selectedSeats.reduce((sum, seat) => {
-    const isVip = VIP_ROWS.includes(seat[0]);
-    return sum + (isVip ? 110000 : 85000);
-  }, 0);
-  const serviceFee = Math.round(ticketTotal * 0.05);
-  const discount = promoApplied ? Math.round(ticketTotal * promoApplied / 100) : 0;
-  const grandTotal = ticketTotal + serviceFee - discount;
+  const selectedSeatObjects = roomSeats.filter(seat => selectedSeats.includes(seat.MAGHE));
 
-  const handleApplyPromo = () => {
-    const code = promoCode.trim().toUpperCase();
-    if (PROMOS[code]) {
-      setPromoApplied(PROMOS[code]);
-      setPromoError('');
-    } else {
-      setPromoApplied(null);
-      setPromoError('Mã không hợp lệ hoặc đã hết hạn');
+  const normalizeSeatType = (seat: ApiSeat) => {
+    if (seat.MALOAIGHE) return seat.MALOAIGHE;
+    if (seat.TENLOAI?.toUpperCase() === 'VIP') return 'LG002';
+    return 'LG001';
+  };
+
+  useEffect(() => {
+    const fetchSeatData = async () => {
+      if (!selectedSuatChieu?.MAPHONG) {
+        setRoomSeats([]);
+        return;
+      }
+
+      try {
+        setIsLoadingSeats(true);
+        const rawData = await catalogAPI.getSeats(selectedSuatChieu.MAPHONG);
+        const normalizedSeats = Array.isArray(rawData) ? rawData.map((seat: any, index: number): ApiSeat => ({
+          MAGHE: seat.MAGHE || seat.maghe || seat.id || `MOCK_${index}`,
+          TENGHE: seat.TENGHE || seat.tenghe || seat.name || `A${index + 1}`,
+          MALOAIGHE: seat.MALOAIGHE || seat.maloaighe || 'LG001',
+          TRANGTHAI: seat.TRANGTHAI || seat.trangthai || seat.status || 'Available',
+          TENLOAI: seat.TENLOAI || seat.tenloai || seat.type || 'Standard',
+        })) : [];
+        setRoomSeats(normalizedSeats);
+      } catch (error) {
+        console.error('[CheckoutScreen] Cannot load seat metadata:', error);
+        setRoomSeats([]);
+      } finally {
+        setIsLoadingSeats(false);
+      }
+    };
+
+    fetchSeatData();
+  }, [selectedSuatChieu?.MAPHONG]);
+
+  // Calculate price from backend whenever selected seats or room data changes
+  useEffect(() => {
+    calculatePriceFromBackend();
+  }, [selectedSeats, selectedSeatObjects.length, selectedDate, selectedShowtime, selectedSuatChieu?.MAPHONG]);
+
+  const calculatePriceFromBackend = async () => {
+    if (!selectedSeats.length || !selectedDate || !selectedShowtime) {
+      setPriceData({ ticketTotal: 0, serviceFee: 0, discount: 0, grandTotal: 0 });
+      return;
+    }
+
+    setIsLoadingPrice(true);
+    setPriceError('');
+
+    try {
+      const seatSource = selectedSeatObjects.length > 0
+        ? selectedSeatObjects
+        : selectedSeats.map((seatId) => ({
+            MAGHE: seatId,
+            TENGHE: seatId,
+            MALOAIGHE: VIP_ROWS.includes(seatId.charAt(0)) ? 'LG002' : 'LG001',
+            TRANGTHAI: 'Available',
+            TENLOAI: VIP_ROWS.includes(seatId.charAt(0)) ? 'VIP' : 'Standard',
+          } as ApiSeat));
+
+      let ticketTotal = 0;
+      const priceCache = new Map<string, number>();
+
+      for (const seat of seatSource) {
+        const seatTypeId = normalizeSeatType(seat);
+        if (!priceCache.has(seatTypeId)) {
+          const priceResponse = await bookingAPI.calculatePrice({
+            maloaighe: seatTypeId,
+            maloaikhach: 'LK001',
+            ngaychieu: selectedDate,
+            giobatdau: selectedShowtime,
+          });
+          priceCache.set(seatTypeId, Number(priceResponse.price || 0));
+        }
+
+        ticketTotal += priceCache.get(seatTypeId) || 0;
+      }
+
+      const serviceFee = Math.round(ticketTotal * 0.05);
+
+      setPriceData({
+        ticketTotal,
+        serviceFee,
+        discount: 0,
+        grandTotal: ticketTotal + serviceFee,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Không thể tính giá. Vui lòng thử lại.';
+      setPriceError(message);
+      
+      // Fallback to local calculation if API fails
+      const ticketTotal = (selectedSeatObjects.length > 0 ? selectedSeatObjects : selectedSeats.map((seatId) => ({
+        MAGHE: seatId,
+        TENGHE: seatId,
+        MALOAIGHE: VIP_ROWS.includes(seatId.charAt(0)) ? 'LG002' : 'LG001',
+        TRANGTHAI: 'Available',
+        TENLOAI: VIP_ROWS.includes(seatId.charAt(0)) ? 'VIP' : 'Standard',
+      } as ApiSeat))).reduce((sum, seat) => {
+        const isVip = seat.TENLOAI?.toUpperCase() === 'VIP' || seat.MALOAIGHE === 'LG002';
+        return sum + (isVip ? 110000 : 85000);
+      }, 0);
+      const serviceFee = Math.round(ticketTotal * 0.05);
+      setPriceData({
+        ticketTotal,
+        serviceFee,
+        discount: 0,
+        grandTotal: ticketTotal + serviceFee,
+      });
+    } finally {
+      setIsLoadingPrice(false);
     }
   };
 
+  const handleApplyPromo = async () => {
+    const code = promoCode.trim().toUpperCase();
+    if (!code) {
+      setPromoError('Vui lòng nhập mã khuyến mãi');
+      return;
+    }
+
+    setIsApplyingVoucher(true);
+    setPromoError('');
+
+    try {
+      const result = await bookingAPI.applyVoucher(code, priceData.ticketTotal);
+      
+      if (result.valid) {
+        const discount = Math.round(priceData.ticketTotal * (result.discountPercent || 0) / 100);
+        setPriceData(prev => ({
+          ...prev,
+          discount,
+          grandTotal: prev.ticketTotal + prev.serviceFee - discount,
+        }));
+        
+        // Store applied voucher in session storage (for final checkout)
+        sessionStorage.setItem('appliedVoucher', code);
+      } else {
+        setPromoError(result.message || 'Mã không hợp lệ hoặc đã hết hạn');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lỗi khi áp dụng mã khuyến mãi';
+      setPromoError(message);
+    } finally {
+      setIsApplyingVoucher(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!selectedSuatChieu) {
+      setSubmitError('Thông tin suất chiếu không hợp lệ. Vui lòng quay lại và chọn lại.');
+      return;
+    }
+
+    if (!selectedSeats.length) {
+      setSubmitError('Vui lòng chọn ít nhất một ghế');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      const token = getToken();
+      if (!token) {
+        setSubmitError('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+      // LẤY MÃ GIAO DỊCH TỪ SESSION RA 
+      const pendingMaGD = sessionStorage.getItem('pendingMaGD');
+      if (!pendingMaGD) {
+        setSubmitError('Giao dịch đã hết hạn hoặc không tồn tại. Vui lòng quay lại chọn ghế.');
+        return;
+      }
+
+      // Prepare checkout data
+      const checkoutData = {
+        magd: pendingMaGD,
+        masuat: selectedSuatChieu.MASUAT,
+        seatIds: selectedSeats,
+        makhuyenmai: sessionStorage.getItem('appliedVoucher') || undefined,
+        paymentMethod,
+        totalAmount: priceData.grandTotal,
+      };
+
+      // Call backend checkout endpoint
+      const result = await bookingAPI.checkout(checkoutData, token);
+
+      const bookingRef = result?.MAVE || result?.transactionId || result?.bookingId;
+
+      if (bookingRef) {
+        // Save booking data to localStorage for profile view
+        const bookings = JSON.parse(localStorage.getItem('myBookings') || '[]');
+        bookings.push({
+          MAVE: bookingRef,
+          TENPHIM: selectedMovie?.title,
+          NGAYCHIEU: selectedDate,
+          GIOBATDAU: selectedShowtime,
+          DANHSACHGHENGOI: selectedSeats.join(', '),
+          TONGTIEN: priceData.grandTotal,
+          PHUONGTHUCTHANHTOAN: paymentMethod,
+          THOIGIAN: new Date().toISOString(),
+        });
+        localStorage.setItem('myBookings', JSON.stringify(bookings));
+
+        // Clear session storage
+        sessionStorage.removeItem('appliedVoucher');
+        sessionStorage.removeItem('pendingMaGD');
+        
+        setBookingId(bookingRef);
+        setIsConfirmed(true);
+      } else {
+        setSubmitError(result?.message || 'Lỗi không xác định. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lỗi khi xác nhận thanh toán. Vui lòng thử lại.';
+      setSubmitError(message);
+      console.error('[CheckoutScreen] Error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Success screen
   if (isConfirmed) {
     return (
-      <div className="min-h-full bg-[#121212] flex items-center justify-center">
+      <div className="min-h-full bg-[#121212] flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <Check className="w-10 h-10 text-green-400" />
           </div>
           <h2 className="text-white mb-2" style={{ fontSize: '1.5rem', fontWeight: 700 }}>Đặt vé thành công!</h2>
+          <p className="text-gray-500 mb-2">Mã vé: <span className="text-[#F5C518] font-mono">{bookingId}</span></p>
           <p className="text-gray-500 mb-6">Vé đã được gửi đến email của bạn. Hẹn gặp bạn tại rạp!</p>
-          <div className="flex gap-3 justify-center">
+          <div className="flex gap-3 justify-center flex-wrap">
             <button
               onClick={() => navigate('/profile')}
               className="bg-[#1C1C1C] border border-[#2A2A2A] text-gray-300 px-6 py-3 rounded-xl hover:bg-[#242424] transition-colors"
@@ -111,6 +352,14 @@ export const CheckoutScreen = () => {
       <div className="flex gap-8 px-10 py-8 max-w-6xl mx-auto">
         {/* LEFT COLUMN: Payment form */}
         <div className="flex-1 space-y-6">
+          {/* Error alert */}
+          {submitError && (
+            <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-400 text-sm">{submitError}</p>
+            </div>
+          )}
+
           {/* Promo code */}
           <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5">
             <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
@@ -120,22 +369,25 @@ export const CheckoutScreen = () => {
             <div className="flex gap-3">
               <input
                 type="text"
-                placeholder="Nhập mã khuyến mãi (VD: CINEMOON25)"
+                placeholder="Nhập mã khuyến mãi"
                 value={promoCode}
                 onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }}
-                className="flex-1 bg-[#252525] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-[#F5C518]/50 text-sm transition-colors"
+                disabled={isApplyingVoucher}
+                className="flex-1 bg-[#252525] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-[#F5C518]/50 text-sm transition-colors disabled:opacity-50"
               />
               <button
                 onClick={handleApplyPromo}
-                className="bg-[#F5C518] hover:bg-[#d4a906] text-black font-semibold px-5 py-3 rounded-lg text-sm transition-colors"
+                disabled={isApplyingVoucher}
+                className="bg-[#F5C518] hover:bg-[#d4a906] disabled:bg-gray-600 text-black font-semibold px-5 py-3 rounded-lg text-sm transition-colors flex items-center gap-2"
               >
+                {isApplyingVoucher && <Loader className="w-4 h-4 animate-spin" />}
                 Áp dụng
               </button>
             </div>
-            {promoApplied && (
+            {priceData.discount > 0 && (
               <div className="mt-3 flex items-center gap-2 text-green-400 text-sm">
                 <Check className="w-4 h-4" />
-                Áp dụng thành công! Giảm {promoApplied}% ({formatCurrency(discount)})
+                Áp dụng thành công! Giảm {formatCurrency(priceData.discount)}
               </div>
             )}
             {promoError && (
@@ -144,17 +396,6 @@ export const CheckoutScreen = () => {
                 {promoError}
               </div>
             )}
-            <div className="mt-3 flex gap-2">
-              {['CINEMOON25', 'VIP50', 'NEWMEMBER'].map(code => (
-                <button
-                  key={code}
-                  onClick={() => setPromoCode(code)}
-                  className="text-xs px-2.5 py-1 bg-[#252525] border border-[#333] rounded-md text-gray-400 hover:text-white hover:border-[#444] transition-colors"
-                >
-                  {code}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Payment methods */}
@@ -178,7 +419,6 @@ export const CheckoutScreen = () => {
                     onChange={() => setPaymentMethod(method.id)}
                     className="hidden"
                   />
-                  {/* Custom radio */}
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                     paymentMethod === method.id ? 'border-[#E50914]' : 'border-[#444]'
                   }`}>
@@ -201,36 +441,38 @@ export const CheckoutScreen = () => {
             </div>
           </div>
 
-          {/* Order summary (mobile-style, left column) */}
+          {/* Order summary */}
           <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5">
             <h3 className="text-white font-semibold mb-4">Chi tiết đơn hàng</h3>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Ghế ({selectedSeats.length} vé)</span>
-                <span className="text-gray-300">{formatCurrency(ticketTotal)}</span>
+                <span className="text-gray-300">{isLoadingPrice || isLoadingSeats ? '...' : formatCurrency(priceData.ticketTotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Phí dịch vụ (5%)</span>
-                <span className="text-gray-300">{formatCurrency(serviceFee)}</span>
+                <span className="text-gray-300">{isLoadingPrice || isLoadingSeats ? '...' : formatCurrency(priceData.serviceFee)}</span>
               </div>
-              {discount > 0 && (
+              {priceData.discount > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-green-400">Giảm giá ({promoApplied}%)</span>
-                  <span className="text-green-400">-{formatCurrency(discount)}</span>
+                  <span className="text-green-400">Giảm giá</span>
+                  <span className="text-green-400">-{formatCurrency(priceData.discount)}</span>
                 </div>
               )}
               <div className="h-px bg-[#2A2A2A] my-2" />
               <div className="flex justify-between">
                 <span className="text-white font-semibold">Tổng thanh toán</span>
-                <span className="text-[#F5C518] font-bold text-lg">{formatCurrency(grandTotal)}</span>
+                <span className="text-[#F5C518] font-bold text-lg">{isLoadingPrice || isLoadingSeats ? '...' : formatCurrency(priceData.grandTotal)}</span>
               </div>
             </div>
 
             <button
-              onClick={() => setIsConfirmed(true)}
-              className="w-full bg-[#E50914] hover:bg-[#C40812] text-white py-4 rounded-xl font-bold text-base mt-5 transition-all shadow-lg shadow-red-900/30 active:scale-[0.98]"
+              onClick={handleConfirmPayment}
+              disabled={isSubmitting || isLoadingPrice || isLoadingSeats || !selectedSeats.length}
+              className="w-full bg-[#E50914] hover:bg-[#C40812] disabled:bg-gray-600 text-white py-4 rounded-xl font-bold text-base mt-5 transition-all shadow-lg shadow-red-900/30 active:scale-[0.98] flex items-center justify-center gap-2"
             >
-              Xác nhận Thanh toán · {formatCurrency(grandTotal)}
+              {isSubmitting && <Loader className="w-4 h-4 animate-spin" />}
+              {isSubmitting ? 'Đang xử lý...' : `Xác nhận Thanh toán · ${formatCurrency(priceData.grandTotal)}`}
             </button>
             <p className="text-center text-gray-600 text-xs mt-2">
               Bằng cách thanh toán, bạn đồng ý với điều khoản dịch vụ
@@ -295,7 +537,7 @@ export const CheckoutScreen = () => {
               {/* Total */}
               <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">Tổng tiền</span>
-                <span className="text-[#F5C518] font-bold">{formatCurrency(grandTotal)}</span>
+                <span className="text-[#F5C518] font-bold">{formatCurrency(priceData.grandTotal)}</span>
               </div>
 
               {/* QR Code placeholder */}

@@ -32,6 +32,12 @@ export const SeatMapScreen = () => {
   const [timeLeft, setTimeLeft] = useState(9 * 60 + 59); // 9:59
   const [isHolding, setIsHolding] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [priceData, setPriceData] = useState({
+    ticketTotal: 0,
+    serviceFee: 0,
+    grandTotal: 0,
+  });
 
   // Đếm ngược giữ ghế
   useEffect(() => {
@@ -138,11 +144,54 @@ export const SeatMapScreen = () => {
   }, [selectedSeats, toggleSeat, setSelectedSeats]);
 
   // Tính tiền
-  const getSeatPrice = (tenLoai: string) => (tenLoai === 'VIP' ? 110000 : 85000);
   const selectedSeatObjects = seats.filter(s => selectedSeats.includes(s.MAGHE));
-  const ticketTotal = selectedSeatObjects.reduce((sum, seat) => sum + getSeatPrice(seat.TENLOAI), 0);
-  const serviceFee = ticketTotal > 0 ? Math.round(ticketTotal * 0.05) : 0;
-  const grandTotal = ticketTotal + serviceFee;
+  useEffect(() => {
+    const recalculatePrice = async () => {
+      if (!selectedSeatObjects.length || !selectedDate || !selectedShowtime) {
+        setPriceData({ ticketTotal: 0, serviceFee: 0, grandTotal: 0 });
+        return;
+      }
+
+      try {
+        setIsLoadingPrice(true);
+        const priceCache = new Map<string, number>();
+        let ticketTotal = 0;
+
+        for (const seat of selectedSeatObjects) {
+          const seatTypeId = seat.MALOAIGHE || (seat.TENLOAI === 'VIP' ? 'LG002' : 'LG001');
+          if (!priceCache.has(seatTypeId)) {
+            const priceResponse = await bookingAPI.calculatePrice({
+              maloaighe: seatTypeId,
+              maloaikhach: 'LK001',
+              ngaychieu: selectedDate,
+              giobatdau: selectedShowtime,
+            });
+            priceCache.set(seatTypeId, Number(priceResponse.price || 0));
+          }
+          ticketTotal += priceCache.get(seatTypeId) || 0;
+        }
+
+        const serviceFee = Math.round(ticketTotal * 0.05);
+        setPriceData({ ticketTotal, serviceFee, grandTotal: ticketTotal + serviceFee });
+      } catch (error) {
+        console.error('Lỗi tính giá ghế:', error);
+        const ticketTotal = selectedSeatObjects.reduce((sum, seat) => {
+          const isVip = seat.TENLOAI === 'VIP' || seat.MALOAIGHE === 'LG002';
+          return sum + (isVip ? 110000 : 85000);
+        }, 0);
+        const serviceFee = ticketTotal > 0 ? Math.round(ticketTotal * 0.05) : 0;
+        setPriceData({ ticketTotal, serviceFee, grandTotal: ticketTotal + serviceFee });
+      } finally {
+        setIsLoadingPrice(false);
+      }
+    };
+
+    recalculatePrice();
+  }, [selectedSeats.join(','), selectedDate, selectedShowtime, seats.length]);
+
+  const ticketTotal = priceData.ticketTotal;
+  const serviceFee = priceData.serviceFee;
+  const grandTotal = priceData.grandTotal;
 
   const formatCurrency = (n: number) => n.toLocaleString('vi-VN') + 'đ';
   const handleContinue = async () => {
@@ -150,10 +199,30 @@ export const SeatMapScreen = () => {
 
     try {
       setIsHolding(true);
-      // Gọi API khóa ghế (Pessimistic Locking ORA-00054)
-      await bookingAPI.holdSeats(selectedSuatChieu.MASUAT, selectedSeats);
+      // DEBUG: Log dữ liệu trước khi gửi
+      console.log('[SeatMapScreen handleContinue] Dữ liệu trước gửi:', {
+        selectedSuatChieu: selectedSuatChieu,
+        MASUAT: selectedSuatChieu?.MASUAT,
+        MASUAT_type: typeof selectedSuatChieu?.MASUAT,
+        selectedSeats: selectedSeats,
+        selectedSeats_length: selectedSeats.length,
+      });
+
+      const response = await bookingAPI.holdSeats(selectedSuatChieu.MASUAT, selectedSeats);
       
-      // Nếu không có lỗi (nghĩa là không ai đang giữ ghế này), tiến tới Checkout
+      // 1. Thêm dòng log này để anh em mình xem mặt mũi dữ liệu nó ra sao
+      console.log("[SeatMapScreen] Dữ liệu HoldSeats trả về:", response); 
+
+      // 2. Sửa lại cách lấy MAGD (Bao lô cả 2 trường hợp có data và không có data)
+      const maGiaoDich = response?.data?.magd || response?.magd;
+
+      if (maGiaoDich) {
+        sessionStorage.setItem('pendingMaGD', maGiaoDich);
+        console.log("Đã lưu mã GD vào Session:", maGiaoDich);
+      } else {
+        console.error("LỖI NẶNG: Backend không trả về magd!");
+      }
+      
       navigate('/checkout');
     } catch (error: any) {
       // Nếu Backend báo lỗi (ví dụ ghế đã bị nẫng tay trên)
@@ -326,11 +395,11 @@ export const SeatMapScreen = () => {
           <div className="p-4 md:p-5 bg-gradient-to-t from-[#161616] to-transparent mt-auto space-y-2 md:space-y-3">
             <div className="flex justify-between">
               <span className="text-white font-semibold text-sm md:text-base">Tổng cộng</span>
-              <span className="text-[#F5C518] font-bold text-base md:text-lg">{formatCurrency(grandTotal)}</span>
+              <span className="text-[#F5C518] font-bold text-base md:text-lg">{isLoadingPrice ? '...' : formatCurrency(grandTotal)}</span>
             </div>
             <button
               // Sửa disabled: thêm điều kiện isHolding để tránh khách bấm liên tục
-              disabled={selectedSeats.length === 0 || isHolding}
+              disabled={selectedSeats.length === 0 || isHolding || isLoadingPrice}
 
               // Sửa onClick: gọi hàm handleContinue thay vì navigate trực tiếp
               onClick={handleContinue}
@@ -341,7 +410,7 @@ export const SeatMapScreen = () => {
                 }`}
             >
               {/* Hiển thị text linh hoạt theo trạng thái */}
-              {isHolding ? 'Đang khóa ghế...' : (selectedSeats.length === 0 ? 'Chọn ghế để tiếp tục' : 'Tiếp tục thanh toán →')}
+              {isHolding ? 'Đang khóa ghế...' : (isLoadingPrice ? 'Đang tính giá...' : (selectedSeats.length === 0 ? 'Chọn ghế để tiếp tục' : 'Tiếp tục thanh toán →'))}
             </button>
           </div>
         </div>
