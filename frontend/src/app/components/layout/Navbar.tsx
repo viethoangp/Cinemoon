@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { Search, Film, Bell, ChevronDown, Ticket } from 'lucide-react';
+import { authAPI } from '../../../services/api';
 
 const AVATAR_URL = "https://images.unsplash.com/photo-1764384700065-304c92b11e9c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=80";
 
@@ -9,6 +10,33 @@ export const Navbar = () => {
   const location = useLocation();
   const [searchVal, setSearchVal] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [userName, setUserName] = useState<string>('User');
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const response = await authAPI.getUserProfile();
+        console.log('[Navbar] API response:', response);
+        if (response && response.HOTEN) {
+          setUserName(response.HOTEN);
+          setUserEmail(response.EMAIL || response.TENDANGNHAP || '');
+        } else if (response) {
+          // Fallback if HOTEN not in response
+          setUserName(response.TENDANGNHAP || 'User');
+          setUserEmail(response.EMAIL || '');
+        }
+      } catch (error) {
+        console.error('[Navbar] Error fetching user info:', error);
+        setUserName('User');
+        setUserEmail('');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUserInfo();
+  }, []);
 
   const navLinks = [
     { label: 'Trang chủ', path: '/home' },
@@ -89,8 +117,8 @@ export const Navbar = () => {
           {showDropdown && (
             <div className="absolute right-0 top-full mt-2 w-48 bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl shadow-2xl overflow-hidden z-50">
               <div className="p-3 border-b border-[#2A2A2A]">
-                <p className="text-white text-sm font-medium">Nguyễn Văn An</p>
-                <p className="text-gray-500 text-xs">an.nguyen@email.com</p>
+                <p className="text-white text-sm font-medium">{userName}</p>
+                <p className="text-gray-500 text-xs">{userEmail}</p>
               </div>
               <button
                 onClick={() => { navigate('/profile'); setShowDropdown(false); }}

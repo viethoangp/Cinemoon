@@ -23,10 +23,9 @@ export async function callStoredProcedure(spName, params) {
     paramNames.forEach(key => {
       const value = params[key];
       if (value && typeof value === 'object' && value.dir) {
-        // OUT parameter
+        // OUT parameter - don't specify type, let Oracle infer it
         bindParams[key] = {
           dir: value.dir === 1 ? oracledb.BIND_OUT : oracledb.BIND_IN,
-          type: value.type || oracledb.STRING,
           maxSize: value.maxSize || 4000,
         };
       } else {

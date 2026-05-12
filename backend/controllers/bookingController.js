@@ -124,14 +124,45 @@ export async function calculateTicketPrice(req, res) {
  */
 export async function checkout(req, res) {
   try {
+    // DEBUG: Log everything received
+    console.log('\n=== [checkout Controller] START ===');
+    console.log('[checkout] Request body:', JSON.stringify(req.body, null, 2));
+    console.log('[checkout] Headers:', {
+      'content-type': req.headers['content-type'],
+      'authorization': req.headers['authorization'] ? '✓ Present' : '✗ Missing',
+    });
+    
     const { masuat, seatIds, makhuyenmai, paymentMethod, totalAmount } = req.body;
     const matk = req.user?.MATK;
 
+    console.log('[checkout] Extracted from body:', {
+      masuat: masuat ? `"${masuat}"` : 'UNDEFINED',
+      seatIds: seatIds ? `[${seatIds}]` : 'UNDEFINED',
+      seatIds_isArray: Array.isArray(seatIds),
+      totalAmount: totalAmount,
+      totalAmount_type: typeof totalAmount,
+      makhuyenmai: makhuyenmai || 'none',
+      paymentMethod: paymentMethod || 'UNDEFINED',
+      matk: matk || 'UNDEFINED (NO AUTH)',
+    });
+
     if (!matk) {
+      console.error('[checkout] ERROR: No MATK - user not authenticated');
       return res.status(401).json(buildResponse(false, 'Chưa xác thực.'));
     }
 
+    // Validation check
+    const validationFails = {
+      masuat_missing: !masuat,
+      seatIds_missing: !seatIds,
+      seatIds_notArray: !Array.isArray(seatIds),
+      totalAmount_missing: !totalAmount,
+    };
+
+    console.log('[checkout] Validation checks:', validationFails);
+
     if (!masuat || !seatIds || !Array.isArray(seatIds) || !totalAmount) {
+      console.error('[checkout] VALIDATION FAILED:', validationFails);
       return res.status(400).json(
         buildResponse(
           false,
@@ -140,19 +171,27 @@ export async function checkout(req, res) {
       );
     }
 
+    console.log('[checkout] ✓ All validations passed, proceeding with checkout...');
+
     // Apply discount if voucher provided
     let discount = 0;
     if (makhuyenmai) {
+      console.log('[checkout] Validating voucher:', makhuyenmai);
       const voucherResult = await validateAndApplyVoucher(
         makhuyenmai,
         totalAmount
       );
       if (voucherResult.valid) {
         discount = voucherResult.discount;
+        console.log('[checkout] Voucher applied - discount:', discount);
       }
     }
 
     // Create transaction
+    console.log('[checkout] Calling createTransaction with data:', {
+      masuat, matk, seatIds, discount, paymentMethod, totalAmount
+    });
+    
     const result = await createTransaction({
       masuat,
       matk,
@@ -162,15 +201,21 @@ export async function checkout(req, res) {
       totalAmount,
     });
 
+    console.log('[checkout] createTransaction result:', result);
+
     if (!result.success) {
+      console.error('[checkout] Transaction failed:', result.message);
       return res.status(400).json(buildResponse(false, result.message, result));
     }
 
+    console.log('[checkout] ✓ Checkout successful, returning:', result.data);
     res.status(201).json(buildResponse(true, result.message, result.data));
   } catch (error) {
-    console.error('Lỗi checkout:', error);
+    console.error('[checkout] EXCEPTION:', error.message);
+    console.error('[checkout] Stack:', error.stack);
     res.status(500).json(buildResponse(false, error.message, {}));
   }
+  console.log('=== [checkout Controller] END ===\n');
 }
 
 /**

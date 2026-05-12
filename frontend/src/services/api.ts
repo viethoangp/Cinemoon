@@ -219,6 +219,36 @@ export const authAPI = {
     
     return json.data;
   },
+
+  /**
+   * Get user profile with booking history
+   * GET /auth/me (alias for ProfileScreen)
+   */
+  getUserProfile: async (token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/auth/me`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
 };
 
 /**

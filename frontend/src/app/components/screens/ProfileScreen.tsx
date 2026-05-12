@@ -1,322 +1,459 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  User, Ticket, LogOut, Star, Clock, MapPin, ChevronRight,
-  Edit3, Shield, Bell, CreditCard, Gift, TrendingUp
+  ChevronLeft,
+  LogOut,
+  User,
+  Mail,
+  Star,
+  Film,
+  Calendar,
+  Clock,
+  MapPin,
+  Users,
+  Ticket,
+  DollarSign,
+  Loader,
+  AlertCircle,
+  Edit2,
+  QrCode,
 } from 'lucide-react';
+import { authAPI } from '../../../services/api';
+import { useApp } from '../../context/AppContext';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
+import { Alert, AlertDescription } from '../ui/alert';
 
-const AVATAR_URL = "https://images.unsplash.com/photo-1764384700065-304c92b11e9c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=80";
+interface UserProfile {
+  MATK?: string;
+  TENDANGNHAP?: string;
+  HOTEN?: string;
+  EMAIL?: string;
+  DIACHI?: string;
+  SODIENTHOAI?: string;
+  DIEMTICHLU?: number;
+  QUYENTRUYCAP?: string;
+  NGAYTAOTK?: string;
+}
 
-const formatCurrency = (n: number) => n.toLocaleString('vi-VN') + 'đ';
+interface Ticket {
+  MAVE?: string;
+  TENPHIM: string;
+  TENRAP: string;
+  PHONG: string;
+  NGAYCHIEU: string;
+  GIOBATDAU: string;
+  DANHSACHGHENGOI: string;
+  TONGTIEN: number;
+  PHUONGTHUCTHANHTOAN: string;
+  THOIGIAN?: string;
+  TRANGTHAIVE?: string;
+}
 
-const BOOKING_HISTORY = [
-  { id: 'CM-2025-8421', date: '24/04/2025', movie: 'Rừng Thiêng', cinema: 'Cinemoon HN - Mipec', seats: 'D5, D6', showtime: '19:30', total: 220000, status: 'paid' },
-  { id: 'CM-2025-7312', date: '20/04/2025', movie: 'Vũ Trụ Song Song', cinema: 'Cinemoon HN - Vincom', seats: 'E4, E5, E6', showtime: '21:00', total: 330000, status: 'paid' },
-  { id: 'CM-2025-6548', date: '15/04/2025', movie: 'Ngọn Lửa Báo Thù', cinema: 'Cinemoon HCM - Bitexco', seats: 'B7', showtime: '19:00', total: 89250, status: 'pending' },
-  { id: 'CM-2025-5901', date: '10/04/2025', movie: 'Bóng Tối Thành Phố', cinema: 'Cinemoon HN - Mipec', seats: 'C3, C4', showtime: '16:30', total: 178500, status: 'paid' },
-  { id: 'CM-2025-4233', date: '05/04/2025', movie: 'Tình Yêu Vĩnh Cửu', cinema: 'Cinemoon HN - Royal City', seats: 'F8, F9', showtime: '20:00', total: 157500, status: 'cancelled' },
-  { id: 'CM-2025-3102', date: '28/03/2025', movie: 'Bóng Ma Cuối Cùng', cinema: 'Cinemoon HCM - Landmark 81', seats: 'A10', showtime: '22:00', total: 84000, status: 'paid' },
-];
+interface BookingHistory {
+  tickets: Ticket[];
+  totalSpent?: number;
+  totalTickets?: number;
+}
 
-type ActiveSection = 'profile' | 'history' | 'loyalty' | 'settings';
-
-const STATUS_CONFIG = {
-  paid: { label: 'Đã thanh toán', color: 'text-green-400 bg-green-400/10 border-green-400/30' },
-  pending: { label: 'Đang chờ', color: 'text-[#F5C518] bg-[#F5C518]/10 border-[#F5C518]/30' },
-  cancelled: { label: 'Đã hủy', color: 'text-gray-500 bg-gray-500/10 border-gray-500/30' },
+const formatDateDisplay = (iso: string) => {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('vi-VN');
+  } catch {
+    return iso;
+  }
 };
+
+const formatTimeDisplay = (time: string) => {
+  if (!time) return '-';
+  if (time.includes(':')) return time.substring(0, 5); // HH:MM
+  return time;
+};
+
+const formatCurrency = (amount: number | undefined) => {
+  if (!amount) return '0đ';
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+const SkeletonLoader = () => (
+  <div className="space-y-4 animate-pulse">
+    <div className="h-32 bg-slate-700 rounded-lg"></div>
+    <div className="h-96 bg-slate-700 rounded-lg"></div>
+  </div>
+);
 
 export const ProfileScreen = () => {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<ActiveSection>('history');
-  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
-  const [bookings, setBookings] = useState(BOOKING_HISTORY);
+  const { user, logout } = useApp();
 
-  const handleCancel = (id: string) => {
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
-    setCancelTarget(null);
+  // State
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [bookingHistory, setBookingHistory] = useState<BookingHistory | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch user profile and booking history
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const response = await authAPI.getUserProfile();
+        console.log('[ProfileScreen] Raw API response:', response);
+
+        // 1. BÓC LỚP VỎ 'data': Xử lý cả trường hợp API có bọc data hoặc không bọc
+        const apiData = response.data ? response.data : response;
+
+        // 2. Lấy thông tin user (Hỗ trợ cả trường hợp bọc trong object 'user' hoặc nằm phẳng)
+        const userData = apiData.user ? apiData.user : apiData;
+
+        // Extract user profile
+        const userProfile: UserProfile = {
+          MATK: userData.MATK || userData.matk,
+          TENDANGNHAP: userData.TENDANGNHAP || userData.tendangnhap || userData.username,
+          HOTEN: userData.HOTEN || userData.hoten || userData.fullName,
+          EMAIL: userData.EMAIL || userData.email,
+          DIACHI: userData.DIACHI || userData.diachi || userData.address,
+          // Bổ sung thêm SDT và DIEMTICHLUY để khớp tuyệt đối với Backend Oracle
+          SODIENTHOAI: userData.SODIENTHOAI || userData.sodienthoai || userData.phone || userData.SDT,
+          DIEMTICHLU: userData.DIEMTICHLUY || userData.DIEMTICHLU || userData.diemtichlu || 0,
+          QUYENTRUYCAP: userData.QUYENTRUYCAP || userData.quyentruycap || 'User',
+          NGAYTAOTK: userData.NGAYTAOTK || userData.ngaytaotk,
+        };
+
+        // 3. Extract booking history một cách chính xác
+        const ticketsList = apiData.tickets || (apiData.data && apiData.data.tickets) || [];
+
+        const bookingData: BookingHistory = {
+          tickets: Array.isArray(ticketsList) ? ticketsList : [],
+          totalSpent: apiData.totalSpent,
+          totalTickets: apiData.totalTickets,
+        };
+
+        setProfile(userProfile);
+        setBookingHistory(bookingData);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Không thể tải thông tin tài khoản';
+        setError(message);
+        console.error('[ProfileScreen] Error fetching profile:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+  
+  const handleLogout = () => {
+    logout();
+    navigate('/');
   };
 
-  const sidebarItems = [
-    { id: 'profile' as ActiveSection, label: 'Thông tin tài khoản', icon: <User className="w-4 h-4" /> },
-    { id: 'history' as ActiveSection, label: 'Lịch sử mua vé', icon: <Ticket className="w-4 h-4" /> },
-    { id: 'loyalty' as ActiveSection, label: 'Điểm tích lũy', icon: <Star className="w-4 h-4" /> },
-    { id: 'settings' as ActiveSection, label: 'Cài đặt', icon: <Bell className="w-4 h-4" /> },
-  ];
+  const handleEditProfile = () => {
+    // TODO: Implement edit profile modal/screen
+    alert('Chỉnh sửa hồ sơ sẽ được phát triển trong phiên bản tiếp theo');
+  };
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 p-4">
+        <div className="max-w-6xl mx-auto">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 transition"
+          >
+            <ChevronLeft size={20} />
+            <span>Quay lại</span>
+          </button>
+          <SkeletonLoader />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ height: '100%' }} className="bg-[#121212] flex overflow-hidden">
-      {/* SIDEBAR */}
-      <div className="w-64 bg-[#0D0D0D] border-r border-[#2A2A2A] flex flex-col py-6">
-        {/* User card */}
-        <div className="px-5 mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="relative">
-              <img src={AVATAR_URL} alt="Avatar" className="w-12 h-12 rounded-full object-cover border-2 border-[#E50914]" />
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#0D0D0D]" />
-            </div>
-            <div>
-              <p className="text-white font-semibold text-sm">Nguyễn Văn An</p>
-              <p className="text-gray-500 text-xs">an.nguyen@email.com</p>
-            </div>
-          </div>
-
-          {/* Loyalty card */}
-          <div className="bg-gradient-to-r from-[#2A1F00] to-[#1A1400] border border-[#F5C518]/20 rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Star className="w-3.5 h-3.5 text-[#F5C518] fill-[#F5C518]" />
-                <span className="text-[#F5C518] text-xs font-semibold">GOLD MEMBER</span>
-              </div>
-              <ChevronRight className="w-3.5 h-3.5 text-[#F5C518]/50" />
-            </div>
-            <div className="text-[#F5C518]" style={{ fontSize: '1.4rem', fontWeight: 800 }}>150</div>
-            <p className="text-[#F5C518]/60 text-xs">điểm tích lũy</p>
-            <div className="mt-2 h-1.5 bg-[#F5C518]/20 rounded-full overflow-hidden">
-              <div className="h-full bg-[#F5C518] rounded-full" style={{ width: '60%' }} />
-            </div>
-            <p className="text-[#F5C518]/40 text-[10px] mt-1">100 điểm để lên PLATINUM</p>
-          </div>
-        </div>
-
-        {/* Nav items */}
-        <nav className="flex-1 px-3 space-y-1">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                activeSection === item.id
-                  ? 'bg-[#E50914]/10 text-[#E50914] border border-[#E50914]/20'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Logout */}
-        <div className="px-3 mt-4 pt-4 border-t border-[#2A2A2A]">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
           <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-[#E50914] hover:bg-[#E50914]/5 transition-all"
+            onClick={handleBack}
+            className="flex items-center gap-2 text-slate-400 hover:text-white transition"
           >
-            <LogOut className="w-4 h-4" />
-            Đăng xuất
+            <ChevronLeft size={20} />
+            <span>Quay lại</span>
           </button>
+          <h1 className="text-3xl font-bold text-white">Hồ sơ cá nhân</h1>
+          <div className="w-12"></div>
         </div>
-      </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 overflow-auto">
-        {/* Section: Profile */}
-        {activeSection === 'profile' && (
-          <div className="p-8">
-            <h2 className="text-white mb-6" style={{ fontSize: '1.5rem', fontWeight: 700 }}>Thông tin tài khoản</h2>
-            <div className="grid grid-cols-2 gap-6">
-              {/* Avatar section */}
-              <div className="col-span-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6 flex items-center gap-6">
-                <div className="relative">
-                  <img src={AVATAR_URL} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-4 border-[#E50914]" />
-                  <button className="absolute bottom-0 right-0 w-8 h-8 bg-[#E50914] rounded-full flex items-center justify-center border-2 border-[#1A1A1A]">
-                    <Edit3 className="w-3.5 h-3.5 text-white" />
-                  </button>
-                </div>
-                <div>
-                  <h3 className="text-white font-bold text-xl">Nguyễn Văn An</h3>
-                  <p className="text-gray-500 text-sm">Thành viên từ tháng 1, 2024</p>
-                  <div className="flex gap-2 mt-2">
-                    <span className="text-xs px-2 py-1 bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] rounded-full">GOLD Member</span>
-                    <span className="text-xs px-2 py-1 bg-[#E50914]/10 border border-[#E50914]/30 text-[#E50914] rounded-full">Verified</span>
-                  </div>
-                </div>
-              </div>
-
-              {[
-                { label: 'Họ và tên', value: 'Nguyễn Văn An' },
-                { label: 'Email', value: 'an.nguyen@email.com' },
-                { label: 'Số điện thoại', value: '0901 234 567' },
-                { label: 'Ngày sinh', value: '15/06/1995' },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5">
-                  <label className="text-gray-500 text-xs mb-2 block">{label}</label>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white">{value}</span>
-                    <button className="text-[#E50914] hover:text-[#ff1a1a] transition-colors">
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Error Alert */}
+        {error && (
+          <Alert className="mb-6 border-red-500/50 bg-red-500/10">
+            <AlertCircle className="h-4 w-4 text-red-500" />
+            <AlertDescription className="text-red-400">{error}</AlertDescription>
+          </Alert>
         )}
 
-        {/* Section: Booking History */}
-        {activeSection === 'history' && (
-          <div className="p-8">
-            {/* Header with stats */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white" style={{ fontSize: '1.5rem', fontWeight: 700 }}>Lịch sử mua vé</h2>
-              <div className="flex items-center gap-4 text-sm text-gray-500">
-                <span className="text-green-400 font-medium">{bookings.filter(b => b.status === 'paid').length} đã thanh toán</span>
-                <span className="text-[#F5C518]">{bookings.filter(b => b.status === 'pending').length} đang chờ</span>
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[#2A2A2A] bg-[#161616]">
-                    {['Mã GD', 'Ngày mua', 'Tên phim', 'Rạp / Giờ chiếu', 'Ghế', 'Tổng tiền', 'Trạng thái', ''].map((h) => (
-                      <th key={h} className="px-5 py-3.5 text-left text-gray-500 text-xs font-medium uppercase tracking-wider">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map((booking, idx) => {
-                    const status = STATUS_CONFIG[booking.status as keyof typeof STATUS_CONFIG];
-                    return (
-                      <tr
-                        key={booking.id}
-                        className={`border-b border-[#222] hover:bg-white/2 transition-colors ${idx % 2 === 1 ? 'bg-[#1C1C1C]' : ''}`}
-                      >
-                        <td className="px-5 py-4 text-[#E50914] text-sm font-mono">{booking.id}</td>
-                        <td className="px-5 py-4 text-gray-400 text-sm">{booking.date}</td>
-                        <td className="px-5 py-4">
-                          <span className="text-white text-sm font-medium">{booking.movie}</span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="text-gray-400 text-xs">
-                            <div className="flex items-center gap-1 mb-0.5">
-                              <MapPin className="w-3 h-3" />{booking.cinema}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />{booking.showtime}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-gray-300 text-sm font-mono">{booking.seats}</td>
-                        <td className="px-5 py-4 text-[#F5C518] text-sm font-semibold">{formatCurrency(booking.total)}</td>
-                        <td className="px-5 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${status.color}`}>
-                            {status.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          {booking.status === 'pending' && (
-                            <button
-                              onClick={() => setCancelTarget(booking.id)}
-                              className="text-[#E50914] hover:text-[#ff1a1a] text-xs font-medium underline transition-colors"
-                            >
-                              Hủy vé
-                            </button>
-                          )}
-                          {booking.status === 'paid' && (
-                            <button className="text-gray-500 hover:text-gray-300 text-xs transition-colors">
-                              Tải vé
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Section: Loyalty */}
-        {activeSection === 'loyalty' && (
-          <div className="p-8">
-            <h2 className="text-white mb-6" style={{ fontSize: '1.5rem', fontWeight: 700 }}>Điểm tích lũy</h2>
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              {[
-                { label: 'Điểm hiện tại', value: '150', icon: <Star className="w-5 h-5 text-[#F5C518]" />, color: 'text-[#F5C518]' },
-                { label: 'Tổng điểm tích lũy', value: '420', icon: <TrendingUp className="w-5 h-5 text-green-400" />, color: 'text-green-400' },
-                { label: 'Điểm đã dùng', value: '270', icon: <Gift className="w-5 h-5 text-[#E50914]" />, color: 'text-[#E50914]' },
-              ].map(({ label, value, icon, color }) => (
-                <div key={label} className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5">
-                  <div className="flex items-center gap-2 mb-3">{icon}<span className="text-gray-500 text-sm">{label}</span></div>
-                  <p className={`${color} font-bold`} style={{ fontSize: '2rem' }}>{value}</p>
-                  <p className="text-gray-600 text-xs">điểm</p>
+        {/* User Profile Card */}
+        <Card className="mb-8 border-slate-700 bg-gradient-to-br from-slate-800 to-slate-900 p-8 shadow-xl">
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Avatar & Basic Info */}
+            <div className="flex flex-col items-center text-center md:text-left md:items-start space-y-6">
+              {/* Avatar */}
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shadow-lg">
+                  <User size={48} className="text-white" />
                 </div>
-              ))}
-            </div>
-            <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
-              <h3 className="text-white font-semibold mb-4">Quyền lợi thành viên GOLD</h3>
-              <div className="space-y-3">
-                {[
-                  'Tích 1 điểm / 1.000đ thanh toán vé',
-                  'Ưu tiên chọn ghế VIP',
-                  'Giảm 10% phí dịch vụ',
-                  'Nhận voucher sinh nhật đặc biệt',
-                ].map((benefit) => (
-                  <div key={benefit} className="flex items-center gap-3">
-                    <div className="w-5 h-5 bg-[#F5C518]/20 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Star className="w-3 h-3 text-[#F5C518] fill-[#F5C518]" />
+                <div className="absolute inset-0 rounded-full border-2 border-purple-400/50"></div>
+              </div>
+
+              {/* User Info */}
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-white mb-1">
+                  {profile?.HOTEN || profile?.TENDANGNHAP || 'Người dùng'}
+                </h2>
+                <div className="space-y-2 text-sm text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Mail size={16} className="text-purple-400" />
+                    <span>{profile?.EMAIL || 'Không có email'}</span>
+                  </div>
+                  {profile?.SODIENTHOAI && (
+                    <div className="flex items-center gap-2">
+                      <PhoneIcon size={16} className="text-purple-400" />
+                      <span>{profile.SODIENTHOAI}</span>
                     </div>
-                    <span className="text-gray-300 text-sm">{benefit}</span>
+                  )}
+                  {profile?.DIACHI && (
+                    <div className="flex items-center gap-2">
+                      <MapPin size={16} className="text-purple-400" />
+                      <span>{profile.DIACHI}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats & Actions */}
+            <div className="flex flex-col justify-between">
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                {/* Points */}
+                <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4 hover:bg-slate-700/70 transition">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Star size={18} className="text-yellow-400" />
+                    <span className="text-xs font-semibold text-slate-300 uppercase">Điểm tích lũy</span>
                   </div>
-                ))}
+                  <p className="text-2xl font-bold text-yellow-400">
+                    {profile?.DIEMTICHLU?.toLocaleString('vi-VN') || 0}
+                  </p>
+                </div>
+
+                {/* Total Tickets */}
+                <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4 hover:bg-slate-700/70 transition">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Ticket size={18} className="text-blue-400" />
+                    <span className="text-xs font-semibold text-slate-300 uppercase">Tổng vé</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-400">
+                    {bookingHistory?.totalTickets || bookingHistory?.tickets?.length || 0}
+                  </p>
+                </div>
+
+                {/* Total Spent */}
+                <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4 hover:bg-slate-700/70 transition md:col-span-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign size={18} className="text-green-400" />
+                    <span className="text-xs font-semibold text-slate-300 uppercase">Tổng chi tiêu</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-400">
+                    {bookingHistory?.totalSpent
+                      ? formatCurrency(bookingHistory.totalSpent)
+                      : bookingHistory?.tickets
+                      ? formatCurrency(
+                          bookingHistory.tickets.reduce((sum, ticket) => sum + (ticket.TONGTIEN || 0), 0)
+                        )
+                      : '0đ'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleEditProfile}
+                  variant="outline"
+                  className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  <Edit2 size={16} />
+                  <span>Chỉnh sửa</span>
+                </Button>
+                <Button
+                  onClick={handleLogout}
+                  variant="destructive"
+                  className="flex-1 bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/50"
+                >
+                  <LogOut size={16} />
+                  <span>Đăng xuất</span>
+                </Button>
               </div>
             </div>
           </div>
-        )}
+        </Card>
 
-        {/* Section: Settings */}
-        {activeSection === 'settings' && (
-          <div className="p-8">
-            <h2 className="text-white mb-6" style={{ fontSize: '1.5rem', fontWeight: 700 }}>Cài đặt</h2>
+        {/* Booking History Section */}
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+            <Film size={24} className="text-purple-400" />
+            Lịch sử đặt vé
+          </h2>
+
+          {!bookingHistory?.tickets || bookingHistory.tickets.length === 0 ? (
+            <Card className="border-slate-700 bg-slate-800/50 p-12 text-center">
+              <Ticket size={48} className="mx-auto mb-4 text-slate-500" />
+              <p className="text-slate-400 mb-2">Chưa có vé nào</p>
+              <p className="text-sm text-slate-500">
+                Bắt đầu đặt vé để xem những bộ phim yêu thích của bạn
+              </p>
+              <Button
+                onClick={() => navigate('/home')}
+                className="mt-4 bg-purple-600 hover:bg-purple-700"
+              >
+                <Film size={16} />
+                <span>Đặt vé ngay</span>
+              </Button>
+            </Card>
+          ) : (
             <div className="space-y-4">
-              {[
-                { title: 'Thông báo email', desc: 'Nhận thông báo đặt vé và khuyến mãi qua email', icon: <Bell className="w-5 h-5 text-[#E50914]" />, enabled: true },
-                { title: 'Bảo mật 2 lớp', desc: 'Xác thực đăng nhập qua số điện thoại', icon: <Shield className="w-5 h-5 text-[#E50914]" />, enabled: false },
-                { title: 'Lưu phương thức thanh toán', desc: 'Ghi nhớ thông tin thanh toán cho lần sau', icon: <CreditCard className="w-5 h-5 text-[#E50914]" />, enabled: true },
-              ].map(({ title, desc, icon, enabled }) => (
-                <div key={title} className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-[#E50914]/10 rounded-lg flex items-center justify-center">{icon}</div>
-                    <div>
-                      <p className="text-white font-medium text-sm">{title}</p>
-                      <p className="text-gray-500 text-xs">{desc}</p>
+              {bookingHistory.tickets.map((ticket, index) => (
+                <Card
+                  key={index}
+                  className="border-slate-700 bg-gradient-to-r from-slate-800 to-slate-800/50 hover:from-slate-800/80 hover:to-slate-800/30 p-6 shadow-lg transition transform hover:scale-[1.01]"
+                >
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {/* Left: Movie & Basic Info */}
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-4">
+                        {/* Ticket Icon */}
+                        <div className="mt-1">
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center">
+                            <Ticket size={24} className="text-white" />
+                          </div>
+                        </div>
+
+                        {/* Movie Title & Cinema */}
+                        <div className="flex-1">
+                          <h3 className="text-lg font-bold text-white leading-tight">
+                            {ticket.TENPHIM}
+                          </h3>
+                          <div className="flex items-center gap-1 text-sm text-slate-300 mt-2">
+                            <MapPin size={14} className="text-slate-400" />
+                            <span>{ticket.TENRAP}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-sm text-slate-300">
+                            <Users size={14} className="text-slate-400" />
+                            <span>Phòng {ticket.PHONG}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Seats */}
+                      <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+                        <p className="text-xs font-semibold text-slate-400 mb-1">GHẾ ĐÃ CHỌN</p>
+                        <p className="text-sm font-semibold text-blue-400">
+                          {ticket.DANHSACHGHENGOI || '-'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Right: Date, Time, Price */}
+                    <div className="space-y-3">
+                      {/* Date & Time Row */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Calendar size={14} className="text-slate-400" />
+                            <p className="text-xs font-semibold text-slate-400 uppercase">Ngày</p>
+                          </div>
+                          <p className="text-sm font-semibold text-white">
+                            {formatDateDisplay(ticket.NGAYCHIEU)}
+                          </p>
+                        </div>
+                        <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Clock size={14} className="text-slate-400" />
+                            <p className="text-xs font-semibold text-slate-400 uppercase">Giờ</p>
+                          </div>
+                          <p className="text-sm font-semibold text-white">
+                            {formatTimeDisplay(ticket.GIOBATDAU)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Payment Method */}
+                      <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+                        <p className="text-xs font-semibold text-slate-400 mb-1">PHƯƠNG THỨC THANH TOÁN</p>
+                        <p className="text-sm font-semibold text-emerald-400">
+                          {ticket.PHUONGTHUCTHANHTOAN || 'Không xác định'}
+                        </p>
+                      </div>
+
+                      {/* Total Price */}
+                      <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30 rounded-lg p-4">
+                        <p className="text-xs font-semibold text-slate-300 mb-1">TỔNG TIỀN</p>
+                        <p className="text-2xl font-bold text-yellow-400">
+                          {formatCurrency(ticket.TONGTIEN)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  {/* Toggle */}
-                  <div className={`w-12 h-6 rounded-full transition-colors cursor-pointer ${enabled ? 'bg-[#E50914]' : 'bg-[#333]'}`}>
-                    <div className={`w-5 h-5 bg-white rounded-full m-0.5 transition-transform shadow ${enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+
+                  {/* Bottom: QR Code Placeholder & Status */}
+                  <div className="mt-4 pt-4 border-t border-slate-600/30 flex items-center justify-between">
+                    <div className="text-xs text-slate-500">
+                      {ticket.THOIGIAN && (
+                        <span>Đặt lúc: {new Date(ticket.THOIGIAN).toLocaleString('vi-VN')}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <QrCode size={14} />
+                      <span className="text-slate-500">Mã vé: {ticket.MAVE || '#' + index}</span>
+                    </div>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Cancel confirmation dialog */}
-      {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setCancelTarget(null)} />
-          <div className="relative bg-[#1A1A1A] border border-[#2A2A2A] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <h3 className="text-white font-bold mb-2">Xác nhận hủy vé</h3>
-            <p className="text-gray-400 text-sm mb-6">Bạn có chắc chắn muốn hủy vé <span className="text-white font-mono">{cancelTarget}</span>? Thao tác này không thể hoàn tác.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setCancelTarget(null)} className="flex-1 py-2.5 bg-[#252525] border border-[#333] text-gray-300 rounded-xl text-sm hover:bg-[#2A2A2A] transition-colors">
-                Giữ lại
-              </button>
-              <button onClick={() => handleCancel(cancelTarget)} className="flex-1 py-2.5 bg-[#E50914] text-white rounded-xl text-sm hover:bg-[#C40812] transition-colors">
-                Hủy vé
-              </button>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
+
+// Phone icon component (not in lucide-react by default)
+const PhoneIcon = ({ size = 24, className }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    viewBox="0 0 24 24"
+  >
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+  </svg>
+);

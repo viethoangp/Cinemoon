@@ -9,18 +9,6 @@ router.post('/login', authCtrl.login);
 router.post('/register', authCtrl.register);
 
 // Protected routes
-router.get('/me', verifyToken, async (req, res) => {
-  try {
-    res.status(200).json({
-      success: true,
-      message: 'Lấy thông tin tài khoản thành công.',
-      data: {
-        user: req.user,
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
-  }
-});
+router.get('/me', verifyToken, authCtrl.getUserProfile);
 
 export default router;

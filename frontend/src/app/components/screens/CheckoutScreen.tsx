@@ -256,6 +256,20 @@ export const CheckoutScreen = () => {
         totalAmount: priceData.grandTotal,
       };
 
+      // DEBUG: Log what we're sending
+      console.log('[CheckoutScreen] DEBUG - Checkout data before sending:', {
+        masuat: selectedSuatChieu?.MASUAT,
+        masuat_check: !!selectedSuatChieu?.MASUAT,
+        seatIds: selectedSeats,
+        seatIds_isArray: Array.isArray(selectedSeats),
+        seatIds_length: selectedSeats.length,
+        totalAmount: priceData.grandTotal,
+        totalAmount_type: typeof priceData.grandTotal,
+        totalAmount_check: !!priceData.grandTotal,
+        priceData_full: priceData,
+        checkoutData_full: checkoutData,
+      });
+
       // Call backend checkout endpoint
       const result = await bookingAPI.checkout(checkoutData, token);
 

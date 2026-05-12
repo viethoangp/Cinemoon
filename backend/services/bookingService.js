@@ -310,39 +310,66 @@ export async function releaseHeldSeats(datIds) {
  * @returns {Promise<{success: boolean, transactionId: string, ticketIds: array}>}
  */
 export async function createTransaction(bookingData) {
+  let connection;
   try {
-    const {
-      masuat,
-      matk,
-      seatIds,
-      discount = 0,
-      paymentMethod = 'Momo',
-      totalAmount,
-    } = bookingData;
+    const { masuat, matk, seatIds, discount = 0, paymentMethod = 'Momo', totalAmount } = bookingData;
 
-    if (!masuat || !matk || !seatIds || seatIds.length === 0 || !totalAmount) {
-      throw new Error('Thiếu thông tin booking bắt buộc.');
+    connection = await getConnection();
+
+    // 1. Tìm lại giao dịch nháp đang giữ ghế
+    const getGdQuery = `SELECT MAGD FROM DAT_CHO WHERE MASUAT = :masuat AND MAGHE = :maghe AND TRANGTHAICHO = 'Held'`;
+    const getGdResult = await connection.execute(getGdQuery, { masuat, maghe: seatIds[0] });
+    
+    if (!getGdResult.rows || getGdResult.rows.length === 0) {
+      await connection.close();
+      return { success: false, message: 'Hết thời gian giữ ghế. Vui lòng thử lại.' };
+    }
+    
+    const magd = getGdResult.rows[0].MAGD || getGdResult.rows[0][0];
+
+    // 2. Cập nhật tổng tiền
+    const updateGdQuery = `
+      UPDATE GIAO_DICH 
+      SET TONGTIEN = :tongtien,
+          MAKH = (SELECT MAKH FROM KHACH_HANG WHERE MATK = :matk)
+      WHERE MAGD = :magd
+    `;
+    await connection.execute(updateGdQuery, { tongtien: totalAmount, matk, magd });
+    
+    await connection.commit();
+    await connection.close();
+    connection = null; 
+
+    const paymentMap = {
+      'momo': 'Momo',
+      'vnpay': 'VNPay',
+      'atm': 'VNPay', // Tạm map ATM qua VNPay nếu DB chưa có
+      'cash': 'Cash',
+      'zalopay': 'Momo' // Tạm map ZaloPay qua Momo nếu DB chưa có
+    };
+    const methodForDB = paymentMap[paymentMethod.toLowerCase()] || 'Momo';
+
+    // 3. GỌI PROCEDURE (KHÔNG ĐƯỢC BỎ BƯỚC NÀY)
+    // Fix lỗi ORA-06550 bằng cách khai báo rõ type: 2002 (Số) và 2001 (Chuỗi)
+    // 3. GỌI PROCEDURE (BẢN FIX CHUẨN THAM SỐ)
+    const finalizeResult = await callStoredProcedure('SP_XU_LY_THANH_TOAN', {
+      p_MaGD: magd,
+      p_PhuongThuc: methodForDB, // Đã sửa tên tham số cho khớp DB
+      p_SoTien: totalAmount,       // Bổ sung tham số bị thiếu
+      p_KetQua: { dir: 1, type: 2002 }, 
+      p_Loi: { dir: 1, type: 2001 }
+    });
+
+    if (finalizeResult.success != 1) {
+      throw new Error(finalizeResult.message || 'Lỗi từ Database khi xuất vé.');
     }
 
-    // TODO: Call stored procedures:
-    // 1. SP_THEM_GIAO_DICH - Create GIAO_DICH record
-    // 2. SP_THEM_VE - Create VE records for each seat
-    // 3. SP_THEM_THANH_TOAN - Create THANH_TOAN record
-
-    // For now, return success placeholder
-    return {
-      success: true,
-      message: 'Tạo giao dịch thành công. (Chưa triển khai đầy đủ)',
-      data: {
-        transactionId: `TX${Date.now()}`,
-        ticketIds: seatIds.map((s, i) => `VE${Date.now()}_${i}`),
-        totalAmount,
-        discount,
-        finalAmount: totalAmount - discount,
-      },
-    };
+    return { success: true, message: 'Đặt vé thành công!', data: { transactionId: magd } };
   } catch (error) {
     console.error('Lỗi createTransaction:', error);
-    throw error;
+    if (connection) {
+      try { await connection.rollback(); await connection.close(); } catch (e) {}
+    }
+    return { success: false, message: error.message };
   }
 }
