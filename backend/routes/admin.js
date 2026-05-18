@@ -43,12 +43,17 @@ router.post('/tham-so', adminCtrl.createThamSo);
 router.put('/tham-so', adminCtrl.updateThamSo);
 router.delete('/tham-so', adminCtrl.deleteThamSo);
 
-// ================== PHIM (SUA/XOA only) ==================
+// ================== PHIM (THEM/SUA/XOA) ==================
+router.post('/phim', adminCtrl.createPhim);
 router.put('/phim', adminCtrl.updatePhim);
 router.delete('/phim', adminCtrl.deletePhim);
 
-// ================== SUAT_CHIEU (SUA/XOA only) ==================
+// ================== SUAT_CHIEU (THEM/SUA/XOA) ==================
+router.post('/suat-chieu', adminCtrl.createSuatChieu);
 router.put('/suat-chieu', adminCtrl.updateSuatChieu);
 router.delete('/suat-chieu', adminCtrl.deleteSuatChieu);
+
+// ================== DASHBOARD STATS ==================
+router.get('/stats/overview', adminCtrl.getDashboardStats);
 
 export default router;

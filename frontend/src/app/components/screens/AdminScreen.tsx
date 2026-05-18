@@ -1,18 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  BarChart2, Film, Calendar, Tag, LogOut, TrendingUp, Ticket,
+  BarChart2, Film, Calendar, Tag, LogOut, TrendingUp, Ticket, Users,
   Flame, Plus, Search, Edit2, Trash2, X, Check, ChevronUp, ChevronDown
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { MOVIES } from '../../context/AppContext';
+import { adminAPI } from '../../../services/api';
+import type { DashboardStats } from '../../../services/api';
 
 const formatCurrency = (n: number) => {
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + ' tỷ';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(0) + ' triệu';
   return n.toLocaleString('vi-VN') + 'đ';
+};
+
+const formatCurrencyVND = (amount: number) => {
+  if (amount >= 1_000_000_000) return (amount / 1_000_000_000).toFixed(1) + ' tỷ';
+  if (amount >= 1_000_000) return (amount / 1_000_000).toFixed(1) + ' triệu';
+  if (amount >= 1_000) return (amount / 1_000).toFixed(0) + 'k';
+  return amount.toLocaleString('vi-VN');
 };
 
 const REVENUE_DATA = [
@@ -63,6 +72,33 @@ export const AdminScreen = () => {
   const [activeTab, setActiveTab] = useState<TabType>('stats');
   const [searchMovie, setSearchMovie] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  
+  // Dashboard Stats State
+  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // Fetch dashboard stats on component mount and when activeTab changes
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setStatsLoading(true);
+        setStatsError(null);
+        const data = await adminAPI.getDashboardStats();
+        setDashboardData(data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Lỗi khi tải dữ liệu';
+        setStatsError(message);
+        console.error('Dashboard fetch error:', error);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    if (activeTab === 'stats') {
+      fetchStats();
+    }
+  }, [activeTab]);
 
   const tabs = [
     { id: 'stats' as TabType, label: 'Thống kê', icon: <BarChart2 className="w-4 h-4" /> },
@@ -130,125 +166,189 @@ export const AdminScreen = () => {
           <div>
             <h2 className="text-white mb-6" style={{ fontSize: '1.25rem', fontWeight: 700 }}>Tổng quan hệ thống</h2>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
-              {[
-                {
-                  title: 'Tổng doanh thu tháng này',
-                  value: '2.6 tỷ đồng',
-                  change: '+18.2%',
-                  up: true,
-                  icon: <TrendingUp className="w-6 h-6 text-green-400" />,
-                  color: 'text-green-400',
-                  bg: 'bg-green-400/10 border-green-400/20',
-                },
-                {
-                  title: 'Tổng vé bán ra tháng này',
-                  value: '3,050 vé',
-                  change: '+12.7%',
-                  up: true,
-                  icon: <Ticket className="w-6 h-6 text-[#E50914]" />,
-                  color: 'text-[#E50914]',
-                  bg: 'bg-[#E50914]/10 border-[#E50914]/20',
-                },
-                {
-                  title: 'Phim Hot nhất',
-                  value: 'Rừng Thiêng',
-                  sub: '1,840 vé đã bán',
-                  icon: <Flame className="w-6 h-6 text-[#F5C518]" />,
-                  color: 'text-[#F5C518]',
-                  bg: 'bg-[#F5C518]/10 border-[#F5C518]/20',
-                },
-                {
-                  title: 'Tổng phim đang chiếu',
-                  value: '4 phim',
-                  sub: '2 phim sắp chiếu',
-                  icon: <Film className="w-6 h-6 text-blue-400" />,
-                  color: 'text-blue-400',
-                  bg: 'bg-blue-400/10 border-blue-400/20',
-                },
-              ].map(({ title, value, change, up, sub, icon, color, bg }) => (
-                <div key={title} className={`bg-[#1A1A1A] border rounded-xl p-5 ${bg}`}>
-                  <div className="flex items-start justify-between mb-4">
-                    <p className="text-gray-500 text-xs leading-relaxed">{title}</p>
-                    <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center flex-shrink-0">
-                      {icon}
-                    </div>
-                  </div>
-                  <p className={`${color} font-bold`} style={{ fontSize: '1.4rem' }}>{value}</p>
-                  {change && (
-                    <div className={`flex items-center gap-1 mt-1 text-xs ${up ? 'text-green-400' : 'text-[#E50914]'}`}>
-                      {up ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      {change} so với tháng trước
-                    </div>
-                  )}
-                  {sub && <p className="text-gray-600 text-xs mt-1">{sub}</p>}
+            {/* Loading State */}
+            {statsLoading && (
+              <div className="text-center py-12">
+                <div className="inline-block">
+                  <div className="w-12 h-12 border-4 border-[#2A2A2A] border-t-[#E50914] rounded-full animate-spin" />
                 </div>
-              ))}
-            </div>
+                <p className="text-gray-400 mt-4">Đang tải dữ liệu...</p>
+              </div>
+            )}
 
-            {/* Chart */}
-            <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-white font-semibold">Doanh thu 6 tháng gần nhất</h3>
-                  <p className="text-gray-500 text-xs mt-0.5">Đơn vị: tỷ đồng</p>
-                </div>
-                <div className="flex gap-2">
-                  {['Doanh thu', 'Vé bán'].map(l => (
-                    <button key={l} className="text-xs px-3 py-1.5 bg-[#252525] border border-[#333] rounded-lg text-gray-400 hover:text-white transition-colors">
-                      {l}
-                    </button>
+            {/* Error State */}
+            {statsError && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+                <p className="text-red-400 text-sm">{statsError}</p>
+              </div>
+            )}
+
+            {/* Dashboard Content */}
+            {!statsLoading && !statsError && dashboardData && (
+              <>
+                {/* KPI Cards */}
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  {[
+                    {
+                      title: 'Tổng doanh thu tháng này',
+                      value: formatCurrencyVND(dashboardData.kpi.revenue),
+                      icon: <TrendingUp className="w-6 h-6 text-green-400" />,
+                      color: 'text-green-400',
+                      bg: 'bg-green-400/10 border-green-400/20',
+                    },
+                    {
+                      title: 'Tổng vé bán ra tháng này',
+                      value: dashboardData.kpi.totalTickets.toLocaleString('vi-VN'),
+                      sub: 'vé',
+                      icon: <Ticket className="w-6 h-6 text-[#E50914]" />,
+                      color: 'text-[#E50914]',
+                      bg: 'bg-[#E50914]/10 border-[#E50914]/20',
+                    },
+                    {
+                      title: 'Số khách hàng mới',
+                      value: dashboardData.kpi.newCustomers.toLocaleString('vi-VN'),
+                      sub: 'khách',
+                      icon: <Users className="w-6 h-6 text-[#F5C518]" />,
+                      color: 'text-[#F5C518]',
+                      bg: 'bg-[#F5C518]/10 border-[#F5C518]/20',
+                    },
+                  ].map(({ title, value, sub, icon, color, bg }) => (
+                    <div key={title} className={`bg-[#1A1A1A] border rounded-xl p-6 ${bg}`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <p className="text-gray-500 text-xs leading-relaxed w-2/3">{title}</p>
+                        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center flex-shrink-0">
+                          {icon}
+                        </div>
+                      </div>
+                      <p className={`${color} font-bold text-2xl`}>{value}</p>
+                      {sub && <p className="text-gray-600 text-xs mt-1">{sub}</p>}
+                    </div>
                   ))}
                 </div>
-              </div>
-              <div style={{ height: 260 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={REVENUE_DATA} barSize={40}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                    <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                      {REVENUE_DATA.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={index === REVENUE_DATA.length - 1 ? '#E50914' : '#3A1A1A'}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
 
-            {/* Top movies table */}
-            <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-5 mt-6">
-              <h3 className="text-white font-semibold mb-4">Top phim theo doanh thu</h3>
-              <div className="space-y-3">
-                {ADMIN_MOVIES.sort((a, b) => b.revenue - a.revenue).slice(0, 4).map((movie, idx) => (
-                  <div key={movie.id} className="flex items-center gap-4">
-                    <span className={`w-6 text-center font-bold text-sm ${idx === 0 ? 'text-[#F5C518]' : 'text-gray-600'}`}>
-                      #{idx + 1}
-                    </span>
-                    <img src={movie.image} alt={movie.title} className="w-10 h-14 object-cover rounded" />
-                    <div className="flex-1">
-                      <p className="text-white text-sm font-medium">{movie.title}</p>
-                      <p className="text-gray-500 text-xs">{movie.ticketsSold.toLocaleString()} vé</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[#F5C518] font-semibold text-sm">{formatCurrency(movie.revenue)}</p>
-                    </div>
-                    <div className="w-28 bg-[#252525] rounded-full h-1.5">
-                      <div
-                        className="bg-gradient-to-r from-[#E50914] to-[#F5C518] h-full rounded-full"
-                        style={{ width: `${(movie.revenue / 174_800_000) * 100}%` }}
-                      />
+                {/* Two columns: Top Movies + Top Customers */}
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                  {/* Top Movies - Bar Chart */}
+                  <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
+                    <h3 className="text-white font-semibold mb-6">Top 5 Phim theo doanh thu</h3>
+                    <div className="space-y-4">
+                      {dashboardData.topMovies.map((movie, idx) => {
+                        const maxRevenue = Math.max(...dashboardData.topMovies.map(m => m.doanhthu), 1);
+                        const percentage = (movie.doanhthu / maxRevenue) * 100;
+                        return (
+                          <div key={movie.maphim} className="flex items-center gap-3">
+                            <span className={`w-6 text-center font-bold text-sm flex-shrink-0 ${
+                              idx === 0 ? 'text-[#F5C518]' : idx === 1 ? 'text-[#E50914]' : 'text-gray-600'
+                            }`}>
+                              #{idx + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium truncate">{movie.tenphim}</p>
+                              <p className="text-gray-500 text-xs">{movie.tongVe.toLocaleString('vi-VN')} vé</p>
+                            </div>
+                            <div className="flex-shrink-0">
+                              <p className="text-[#F5C518] font-semibold text-sm">{formatCurrencyVND(movie.doanhthu)}</p>
+                            </div>
+                            <div className="w-20 bg-[#252525] rounded-full h-2 flex-shrink-0">
+                              <div
+                                className="bg-gradient-to-r from-[#E50914] to-[#F5C518] h-full rounded-full transition-all"
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+
+                  {/* Top Customers - Table */}
+                  <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
+                    <h3 className="text-white font-semibold mb-4">Top 5 Khách hàng</h3>
+                    <div className="space-y-2">
+                      {dashboardData.topCustomers.map((customer, idx) => (
+                        <div key={customer.makh} className="flex items-center justify-between p-3 bg-[#252525] rounded-lg hover:bg-[#2A2A2A] transition-colors">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                              idx === 0 ? 'bg-[#F5C518] text-black' : idx === 1 ? 'bg-[#E50914] text-white' : 'bg-gray-600 text-white'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-white text-sm font-medium truncate">{customer.hoten}</p>
+                              <p className="text-gray-500 text-xs">{customer.soGiaoDich} lần mua</p>
+                            </div>
+                          </div>
+                          <p className="text-[#F5C518] font-semibold text-sm flex-shrink-0">{formatCurrencyVND(customer.tongChiTieu)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Today's Occupancy Rate */}
+                <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
+                  <h3 className="text-white font-semibold mb-4">Tỷ lệ lấp đầy suất chiếu hôm nay</h3>
+                  {dashboardData.occupancyRate.length === 0 ? (
+                    <p className="text-gray-500 text-sm py-8 text-center">Không có suất chiếu nào hôm nay</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-[#2A2A2A]">
+                            {['Giờ', 'Phim', 'Phòng', 'Tỷ lệ', 'Vé / Tổng'].map(h => (
+                              <th key={h} className="text-left px-4 py-3 text-gray-500 text-xs font-medium">
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dashboardData.occupancyRate.map((showtime, idx) => (
+                            <tr key={showtime.masuat} className={`border-b border-[#2A2A2A] hover:bg-white/2 transition ${
+                              idx % 2 === 1 ? 'bg-[#1C1C1C]' : ''
+                            }`}>
+                              <td className="px-4 py-3.5">
+                                <span className="text-white text-sm font-medium">{showtime.giobatdau}</span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="text-gray-300 text-sm truncate">{showtime.tenphim}</span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="text-gray-400 text-sm">{showtime.maphong}</span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-32 bg-[#252525] rounded-full h-2">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${
+                                        showtime.tyLeLapDay >= 80
+                                          ? 'bg-[#E50914]'
+                                          : showtime.tyLeLapDay >= 50
+                                          ? 'bg-[#F5C518]'
+                                          : 'bg-green-500'
+                                      }`}
+                                      style={{ width: `${showtime.tyLeLapDay}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-white text-xs font-medium w-10 text-right">
+                                    {showtime.tyLeLapDay}%
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3.5 text-right">
+                                <span className="text-gray-400 text-sm">
+                                  {showtime.soVeBan} / {showtime.succhuaghe}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 

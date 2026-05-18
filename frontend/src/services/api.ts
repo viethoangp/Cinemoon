@@ -45,6 +45,46 @@ interface ApiCinema {
   DIACHI: string;
 }
 
+// Dashboard Stats types
+interface DashboardKPI {
+  revenue: number;
+  totalTickets: number;
+  newCustomers: number;
+}
+
+interface TopMovie {
+  maphim: string;
+  tenphim: string;
+  poster: string;
+  doanhthu: number;
+  tongVe: number;
+}
+
+interface TopCustomer {
+  makh: string;
+  hoten: string;
+  tongChiTieu: number;
+  soGiaoDich: number;
+}
+
+interface OccupancyRate {
+  masuat: string;
+  ngaychieu: string;
+  giobatdau: string;
+  tenphim: string;
+  maphong: string;
+  succhuaghe: number;
+  soVeBan: number;
+  tyLeLapDay: number;
+}
+
+interface DashboardStats {
+  kpi: DashboardKPI;
+  topMovies: TopMovie[];
+  topCustomers: TopCustomer[];
+  occupancyRate: OccupancyRate[];
+}
+
 /**
  * Generic fetch wrapper with error handling and mock data fallback
  */
@@ -331,5 +371,40 @@ export const bookingAPI = {
   },
 };
 
+/**
+ * Admin API - Protected admin-only endpoints
+ */
+export const adminAPI = {
+  /**
+   * Get dashboard statistics
+   * GET /admin/stats/overview
+   */
+  getDashboardStats: async (token?: string): Promise<DashboardStats> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/stats/overview`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+};
+
 // Export types
-export type { ApiResponse, ApiMovie, ApiShowtime, ApiCinema };
+export type { ApiResponse, ApiMovie, ApiShowtime, ApiCinema, DashboardStats, DashboardKPI, TopMovie, TopCustomer, OccupancyRate };

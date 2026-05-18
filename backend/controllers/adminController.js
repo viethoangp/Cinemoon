@@ -1,6 +1,6 @@
 import { callStoredProcedure } from '../services/spService.js';
 import { SP_CATALOG } from '../config/constants.js';
-import { getOracle } from '../config/db.js';
+import { getOracle, getConnection } from '../config/db.js';
 
 // Helper: Build response from SP result
 function buildResponse(spResult) {
@@ -570,5 +570,263 @@ export const deleteSuatChieu = async (req, res) => {
   } catch (error) {
     console.error('Lỗi deleteSuatChieu:', error);
     res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  }
+};
+
+// ================== PHIM (THEM) - AdminScreen Create Movie ==================
+export const createPhim = async (req, res) => {
+  try {
+    const {
+      tenphim,
+      theloai,
+      thoiluong,
+      daodien,
+      dienvien,
+      ngayphathanh,
+      poster,
+      trailer,
+      mota,
+      gioihantuoi,
+      trangthai,
+    } = req.body;
+
+    // Validate required fields
+    if (!tenphim || !theloai || !thoiluong) {
+      return res.status(400).json({
+        success: false,
+        message: 'Thiếu tham số bắt buộc: tenphim, theloai, thoiluong.',
+      });
+    }
+
+    const result = await callStoredProcedure(SP_CATALOG.THEM_PHIM, {
+      p_TENPHIM: tenphim,
+      p_THELOAI: theloai,
+      p_THOILUONG: thoiluong,
+      p_DAODIEN: daodien || null,
+      p_DIENVIEN: dienvien || null,
+      p_NGAYPHATHANH: ngayphathanh || null,
+      p_POSTER: poster || null,
+      p_TRAILER: trailer || null,
+      p_MOTA: mota || null,
+      p_GIOIHANTUOI: gioihantuoi || 0,
+      p_TRANGTHAI: trangthai || 'Upcoming',
+      p_KetQua: { dir: 1, type: getOracle().NUMBER },
+      p_Loi: { dir: 1, type: getOracle().STRING, maxSize: 4000 },
+      p_MAPHIM: { dir: 1, type: getOracle().STRING, maxSize: 20 },
+    });
+
+    // If SP failed (p_KetQua = 0), return 400 with error message
+    if (result.success === 0) {
+      return res.status(400).json({
+        success: false,
+        message: result.message || 'Lỗi tạo phim.',
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Tạo phim thành công.',
+      data: {
+        maphim: result.outParams.p_MAPHIM,
+        tenphim,
+        theloai,
+      },
+    });
+  } catch (error) {
+    console.error('Lỗi createPhim:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  }
+};
+
+// ================== SUAT_CHIEU (THEM) - Create Showtime with Conflict Check ==================
+export const createSuatChieu = async (req, res) => {
+  try {
+    const { maphim, maphong, ngaychieu, giobatdau, gioketthuc, trangthaisuat } = req.body;
+
+    // Validate required fields
+    if (!maphim || !maphong || !ngaychieu || !giobatdau || !gioketthuc) {
+      return res.status(400).json({
+        success: false,
+        message: 'Thiếu tham số bắt buộc: maphim, maphong, ngaychieu, giobatdau, gioketthuc.',
+      });
+    }
+
+    const result = await callStoredProcedure(SP_CATALOG.THEM_SUAT_CHIEU, {
+      p_MAPHIM: maphim,
+      p_MAPHONG: maphong,
+      p_NGAYCHIEU: new Date(ngaychieu), // Convert to Date object
+      p_GIOBATDAU: new Date(giobatdau), // Convert to timestamp
+      p_GIOKETTHUC: new Date(gioketthuc), // Convert to timestamp
+      p_TRANGTHAISUAT: trangthaisuat || 'Upcoming',
+      p_KetQua: { dir: 1, type: getOracle().NUMBER },
+      p_Loi: { dir: 1, type: getOracle().STRING, maxSize: 4000 },
+      p_MASUAT: { dir: 1, type: getOracle().STRING, maxSize: 20 },
+    });
+
+    // If SP failed (p_KetQua = 0), return 400 with conflict error message
+    if (result.success === 0) {
+      return res.status(400).json({
+        success: false,
+        message: result.message || 'Lỗi tạo suất chiếu.',
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Tạo suất chiếu thành công.',
+      data: {
+        masuat: result.outParams.p_MASUAT,
+        maphim,
+        maphong,
+        ngaychieu,
+      },
+    });
+  } catch (error) {
+    console.error('Lỗi createSuatChieu:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  }
+};
+
+// ================== DASHBOARD STATS - Parallel Query Execution ==================
+export const getDashboardStats = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+
+    // Define all 6 dashboard queries
+    const queries = {
+      revenue: `
+        SELECT COALESCE(SUM(gd.TONGTIEN), 0) as TONGTIEN_THANG
+        FROM GIAO_DICH gd
+        WHERE gd.TRANGTHAIGD = 'Paid'
+          AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
+          AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+      `,
+      totalTickets: `
+        SELECT COALESCE(COUNT(v.MAVE), 0) as TONG_VE
+        FROM VE v
+        JOIN GIAO_DICH gd ON v.MAGD = gd.MAGD
+        WHERE gd.TRANGTHAIGD = 'Paid'
+          AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
+          AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+      `,
+      newCustomers: `
+        SELECT COALESCE(COUNT(DISTINCT kh.MAKH), 0) as KH_MOI
+        FROM KHACH_HANG kh
+        JOIN TAI_KHOAN tk ON kh.MATK = tk.MATK
+        WHERE EXTRACT(MONTH FROM tk.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
+          AND EXTRACT(YEAR FROM tk.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+      `,
+      topMovies: `
+        SELECT 
+          p.MAPHIM,
+          p.TENPHIM,
+          p.POSTER,
+          COALESCE(SUM(gd.TONGTIEN), 0) as DOANHTHU,
+          COALESCE(COUNT(v.MAVE), 0) as TONG_VE
+        FROM PHIM p
+        LEFT JOIN SUAT_CHIEU sc ON p.MAPHIM = sc.MAPHIM
+        LEFT JOIN VE v ON sc.MASUAT = v.MASUAT
+        LEFT JOIN GIAO_DICH gd ON v.MAGD = gd.MAGD
+        WHERE gd.TRANGTHAIGD IS NULL OR gd.TRANGTHAIGD = 'Paid'
+        GROUP BY p.MAPHIM, p.TENPHIM, p.POSTER
+        ORDER BY DOANHTHU DESC
+        FETCH FIRST 5 ROWS ONLY
+      `,
+      topCustomers: `
+        SELECT 
+          kh.MAKH,
+          kh.HOTEN,
+          COALESCE(SUM(gd.TONGTIEN), 0) as TONGCHITIÊU,
+          COALESCE(COUNT(gd.MAGD), 0) as SO_GIAODICH
+        FROM KHACH_HANG kh
+        LEFT JOIN GIAO_DICH gd ON kh.MAKH = gd.MAKH
+        WHERE gd.TRANGTHAIGD IS NULL OR gd.TRANGTHAIGD = 'Paid'
+        GROUP BY kh.MAKH, kh.HOTEN
+        ORDER BY TONGCHITIÊU DESC
+        FETCH FIRST 5 ROWS ONLY
+      `,
+      occupancyRate: `
+        SELECT 
+          sc.MASUAT,
+          sc.NGAYCHIEU,
+          TO_CHAR(sc.GIOBATDAU, 'HH24:MI') as GIOBATDAU,
+          p.TENPHIM,
+          ph.MAPHONG,
+          ph.SUCCHUAGHE,
+          COALESCE(COUNT(v.MAVE), 0) as SO_VE_BAN,
+          ROUND((COALESCE(COUNT(v.MAVE), 0) / ph.SUCCHUAGHE) * 100, 2) as TY_LE_LAP_DAY
+        FROM SUAT_CHIEU sc
+        JOIN PHIM p ON sc.MAPHIM = p.MAPHIM
+        JOIN PHONG_CHIEU ph ON sc.MAPHONG = ph.MAPHONG
+        LEFT JOIN VE v ON sc.MASUAT = v.MASUAT
+        WHERE TRUNC(sc.NGAYCHIEU) = TRUNC(SYSDATE)
+        GROUP BY sc.MASUAT, sc.NGAYCHIEU, sc.GIOBATDAU, p.TENPHIM, ph.MAPHONG, ph.SUCCHUAGHE
+        ORDER BY sc.GIOBATDAU ASC
+      `,
+    };
+
+    // Execute all 6 queries in PARALLEL using Promise.all()
+    const results = await Promise.all([
+      connection.execute(queries.revenue, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.totalTickets, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.newCustomers, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.topMovies, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.topCustomers, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.occupancyRate, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+    ]);
+
+    // Extract data from each query result
+    const [revenueRes, ticketsRes, customersRes, moviesRes, customersTopRes, occupancyRes] = results;
+
+    // Format response data cleanly as JavaScript objects/arrays
+    const statsData = {
+      kpi: {
+        revenue: revenueRes.rows[0]?.TONGTIEN_THANG || 0,
+        totalTickets: ticketsRes.rows[0]?.TONG_VE || 0,
+        newCustomers: customersRes.rows[0]?.KH_MOI || 0,
+      },
+      topMovies: moviesRes.rows.map(row => ({
+        maphim: row.MAPHIM,
+        tenphim: row.TENPHIM,
+        poster: row.POSTER,
+        doanhthu: row.DOANHTHU,
+        tongVe: row.TONG_VE,
+      })),
+      topCustomers: customersTopRes.rows.map(row => ({
+        makh: row.MAKH,
+        hoten: row.HOTEN,
+        tongChiTieu: row.TONGCHITIÊU,
+        soGiaoDich: row.SO_GIAODICH,
+      })),
+      occupancyRate: occupancyRes.rows.map(row => ({
+        masuat: row.MASUAT,
+        ngaychieu: row.NGAYCHIEU,
+        giobatdau: row.GIOBATDAU,
+        tenphim: row.TENPHIM,
+        maphong: row.MAPHONG,
+        succhuaghe: row.SUCCHUAGHE,
+        soVeBan: row.SO_VE_BAN,
+        tyLeLapDay: row.TY_LE_LAP_DAY,
+      })),
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy thống kê dashboard thành công.',
+      data: statsData,
+    });
+  } catch (error) {
+    console.error('Lỗi getDashboardStats:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeError) {
+        console.error('Lỗi khi đóng connection:', closeError);
+      }
+    }
   }
 };

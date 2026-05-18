@@ -625,4 +625,99 @@ EXCEPTION
 END SP_XOA_SUAT_CHIEU;
 /
 
+-- PHIM (THEM only) - AdminScreen Create Movie
+CREATE OR REPLACE PROCEDURE SP_THEM_PHIM(
+  p_TENPHIM IN VARCHAR2,
+  p_THELOAI IN VARCHAR2,
+  p_THOILUONG IN NUMBER,
+  p_DAODIEN IN VARCHAR2,
+  p_DIENVIEN IN VARCHAR2,
+  p_NGAYPHATHANH IN DATE,
+  p_POSTER IN VARCHAR2,
+  p_TRAILER IN VARCHAR2,
+  p_MOTA IN VARCHAR2,
+  p_GIOIHANTUOI IN NUMBER,
+  p_TRANGTHAI IN VARCHAR2,
+  p_KetQua OUT NUMBER,
+  p_Loi OUT VARCHAR2,
+  p_MAPHIM OUT VARCHAR2
+) IS
+  v_MAPHIM VARCHAR2(20);
+BEGIN
+  -- Generate MAPHIM: P + LPAD(sequence, 5, '0')
+  v_MAPHIM := 'P' || LPAD(SEQ_PHIM.NEXTVAL, 5, '0');
+  p_MAPHIM := v_MAPHIM;
+  
+  -- Insert new movie
+  INSERT INTO PHIM(MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN,
+                   NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI)
+    VALUES(v_MAPHIM, p_TENPHIM, p_THELOAI, p_THOILUONG, p_DAODIEN, p_DIENVIEN,
+           p_NGAYPHATHANH, p_POSTER, p_TRAILER, p_MOTA, p_GIOIHANTUOI, p_TRANGTHAI);
+  
+  COMMIT;
+  p_KetQua := 1;
+  p_Loi := NULL;
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK;
+    p_KetQua := 0;
+    p_Loi := SUBSTR(SQLERRM, 1, 4000);
+END SP_THEM_PHIM;
+/
+
+-- SUAT_CHIEU (THEM only) - AdminScreen Create Showtime with Conflict Check
+CREATE OR REPLACE PROCEDURE SP_THEM_SUAT_CHIEU(
+  p_MAPHIM IN VARCHAR2,
+  p_MAPHONG IN VARCHAR2,
+  p_NGAYCHIEU IN DATE,
+  p_GIOBATDAU IN TIMESTAMP,
+  p_GIOKETTHUC IN TIMESTAMP,
+  p_TRANGTHAISUAT IN VARCHAR2,
+  p_KetQua OUT NUMBER,
+  p_Loi OUT VARCHAR2,
+  p_MASUAT OUT VARCHAR2
+) IS
+  v_MASUAT VARCHAR2(20);
+  v_TRUNG NUMBER;
+BEGIN
+  -- STEP 1: Check for time conflict
+  -- Cannot have 2 showtimes in same room with overlapping times on same day
+  SELECT COUNT(*) INTO v_TRUNG
+  FROM SUAT_CHIEU
+  WHERE MAPHONG = p_MAPHONG
+    AND NGAYCHIEU = p_NGAYCHIEU
+    AND (
+      -- Time overlap check: new start < existing end AND new end > existing start
+      p_GIOBATDAU < GIOKETTHUC 
+      AND p_GIOKETTHUC > GIOBATDAU
+    );
+  
+  IF v_TRUNG > 0 THEN
+    p_KetQua := 0;
+    p_Loi := 'Phòng chiếu này đã có suất chiếu trùng lịch. Vui lòng chọn giờ khác.';
+    p_MASUAT := NULL;
+    RETURN;
+  END IF;
+  
+  -- STEP 2: Generate MASUAT and insert new showtime
+  v_MASUAT := 'SC' || LPAD(SEQ_SC.NEXTVAL, 5, '0');
+  p_MASUAT := v_MASUAT;
+  
+  INSERT INTO SUAT_CHIEU(MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
+    VALUES(v_MASUAT, p_MAPHIM, p_MAPHONG, p_NGAYCHIEU, p_GIOBATDAU, p_GIOKETTHUC, p_TRANGTHAISUAT);
+  
+  COMMIT;
+  p_KetQua := 1;
+  p_Loi := NULL;
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK;
+    p_KetQua := 0;
+    p_Loi := SUBSTR(SQLERRM, 1, 4000);
+    p_MASUAT := NULL;
+END SP_THEM_SUAT_CHIEU;
+/
+
 -- End of CRUD procedures file
