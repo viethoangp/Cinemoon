@@ -78,8 +78,14 @@ interface OccupancyRate {
   tyLeLapDay: number;
 }
 
+interface MonthlyRevenue {
+  month: number;
+  revenue: number;
+}
+
 interface DashboardStats {
   kpi: DashboardKPI;
+  monthlyRevenue: MonthlyRevenue[];
   topMovies: TopMovie[];
   topCustomers: TopCustomer[];
   occupancyRate: OccupancyRate[];
@@ -110,15 +116,11 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       },
       ...options,
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
+    
     const json = await response.json();
-
-    if (!json.success) {
-      throw new Error(json.message || 'Lỗi từ server');
+    if (!response.ok || !json.success) {
+      // Sẽ ném ra câu: "Không thể xóa vì suất chiếu này đã có người đặt ghế..."
+      throw new Error(json.message || `Lỗi HTTP ${response.status}`); 
     }
 
     return json.data;
@@ -374,6 +376,87 @@ export const bookingAPI = {
 /**
  * Admin API - Protected admin-only endpoints
  */
+
+// Movie types for admin
+interface Movie {
+  maphim: string;
+  tenphim: string;
+  poster?: string;
+  thoigianphim: number;
+  ngayPhatHanhThuyetMinh?: string;
+  daiPhim?: string;
+  directorName?: string;
+  soSuatChieu?: number;
+  doanhThuThang?: number;
+  mota?: string;
+  dacdiem?: string;
+}
+
+interface Genre {
+  madai: string;
+  tendai: string;
+}
+
+interface MovieListResponse {
+  movies: Movie[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+}
+
+// Showtime types for admin
+interface Room {
+  maphong: string;
+  tenrap: string;
+  succhuaghe: number;
+}
+
+interface MovieDropdown {
+  maphim: string;
+  tenphim: string;
+  thoiluong: number;
+}
+
+interface Showtime {
+  masuat: string;
+  maphim: string;
+  tenphim: string;
+  maphong: string;
+  succhuaghe: number;
+  ngaychieu: string;
+  giobatdau: string;
+  gioketthuc: string;
+  trangthaisuat: string;
+  soVeBan: number;
+  tyLeLapDay: number;
+}
+
+interface ShowtimeListResponse {
+  showtimes: Showtime[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+}
+
+// Voucher types for admin
+interface Voucher {
+  makhuyenmai: string;
+  tenchuongtrinh: string;
+  giatrigiam: number;
+  dieukienapdung: string;
+  ngaybatdau: string;
+  ngayketthuc: string;
+  soLanSuDung?: number;
+  trangThai?: string;
+}
+
+interface VoucherListResponse {
+  vouchers: Voucher[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+}
+
 export const adminAPI = {
   /**
    * Get dashboard statistics
@@ -404,7 +487,520 @@ export const adminAPI = {
 
     return json.data;
   },
+
+  // ==================== PHASE 2: Movie Management ====================
+
+  /**
+   * Get movies list with pagination and search
+   * GET /admin/phim?search=...&page=1&limit=10
+   */
+  getMovies: async (params?: { search?: string; page?: number; limit?: number }, token?: string): Promise<MovieListResponse> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+    const endpoint = `/admin/phim${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Get single movie details
+   * GET /admin/phim/:maphim
+   */
+  getMovieById: async (maphim: string, token?: string): Promise<Movie> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/phim/${maphim}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Create new movie
+   * POST /admin/phim-create
+   */
+  createMovie: async (data: Partial<Movie>, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/phim-create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Update movie
+   * PUT /admin/phim/:maphim
+   */
+  updateMovie: async (maphim: string, data: Partial<Movie>, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/phim/${maphim}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Delete movie
+   * DELETE /admin/phim/:maphim
+   */
+  deleteMovie: async (maphim: string, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/phim/${maphim}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Get genres/categories for dropdown
+   * GET /admin/dai
+   */
+  getGenres: async (token?: string): Promise<Genre[]> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/dai`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  // ==================== PHASE 3: Showtime Management ====================
+
+  /**
+   * Get showtimes list with pagination and search
+   * GET /admin/suat-chieu?search=...&page=1&limit=10
+   */
+  getShowtimes: async (params?: { search?: string; page?: number; limit?: number }, token?: string): Promise<ShowtimeListResponse> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+    const endpoint = `/admin/suat-chieu${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Get cinema rooms for dropdown
+   * GET /admin/phong-chieu-list
+   */
+  getRooms: async (token?: string): Promise<Room[]> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/phong-chieu-list`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Get movies list for dropdown
+   * GET /admin/phim-list
+   */
+  getMoviesDropdown: async (token?: string): Promise<MovieDropdown[]> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/phim-list`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Create new showtime
+   * POST /admin/suat-chieu-create
+   */
+  createShowtime: async (data: Partial<Showtime>, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/suat-chieu-create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Update showtime
+   * PUT /admin/suat-chieu/:masuat
+   */
+  updateShowtime: async (masuat: string, data: Partial<Showtime>, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/suat-chieu/${masuat}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Delete showtime
+   * DELETE /admin/suat-chieu/:masuat
+   */
+  deleteShowtime: async (masuat: string, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/suat-chieu/${masuat}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  // ==================== PHASE 4: Voucher Management ====================
+
+  /**
+   * Get vouchers list with pagination and search
+   * GET /admin/khuyen-mai?search=...&page=1&limit=10
+   */
+  getVouchers: async (params?: { search?: string; page?: number; limit?: number }, token?: string): Promise<VoucherListResponse> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+    const endpoint = `/admin/khuyen-mai${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Create new voucher
+   * POST /admin/khuyen-mai-create
+   */
+  createVoucher: async (data: Partial<Voucher>, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/khuyen-mai-create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Update voucher
+   * PUT /admin/khuyen-mai/:makhuyenmai
+   */
+  updateVoucher: async (makhuyenmai: string, data: Partial<Voucher>, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/khuyen-mai/${makhuyenmai}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
+
+  /**
+   * Delete voucher
+   * DELETE /admin/khuyen-mai/:makhuyenmai
+   */
+  deleteVoucher: async (makhuyenmai: string, token?: string): Promise<any> => {
+    const authToken = token || localStorage.getItem('cinemoon_token');
+    if (!authToken) {
+      throw new Error('Không có token. Vui lòng đăng nhập');
+    }
+
+    const response = await fetch(`${API_BASE}/admin/khuyen-mai/${makhuyenmai}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const json = await response.json();
+    if (!json.success) {
+      throw new Error(json.message || 'Lỗi từ server');
+    }
+
+    return json.data;
+  },
 };
 
 // Export types
-export type { ApiResponse, ApiMovie, ApiShowtime, ApiCinema, DashboardStats, DashboardKPI, TopMovie, TopCustomer, OccupancyRate };
+export type { ApiResponse, ApiMovie, ApiShowtime, ApiCinema, DashboardStats, DashboardKPI, TopMovie, TopCustomer, OccupancyRate, Movie, Genre, MovieListResponse, Showtime, ShowtimeListResponse, Room, MovieDropdown, Voucher, VoucherListResponse };

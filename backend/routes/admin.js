@@ -56,4 +56,26 @@ router.delete('/suat-chieu', adminCtrl.deleteSuatChieu);
 // ================== DASHBOARD STATS ==================
 router.get('/stats/overview', adminCtrl.getDashboardStats);
 
+// ================== PHASE 2: MOVIES MANAGEMENT ==================
+router.get('/phim', adminCtrl.getMovies);                    // GET list with pagination + search
+router.get('/phim/:maphim', adminCtrl.getMovieById);        // GET single movie details
+router.post('/phim-create', adminCtrl.createMovieWithApi);   // POST create movie
+router.put('/phim/:maphim', adminCtrl.updateMovieWithApi);   // PUT update movie
+router.delete('/phim/:maphim', adminCtrl.deleteMovieWithApi); // DELETE movie
+router.get('/dai', adminCtrl.getGenres);                     // GET genres for dropdown
+
+// ================== PHASE 3: SCHEDULE MANAGEMENT ==================
+router.get('/suat-chieu', adminCtrl.getShowtimes);           // GET list with pagination + search
+router.get('/phong-chieu-list', adminCtrl.getRooms);         // GET rooms for dropdown
+router.get('/phim-list', adminCtrl.getMoviesDropdown);       // GET movies for dropdown
+router.post('/suat-chieu-create', adminCtrl.createShowtime); // POST create showtime
+router.put('/suat-chieu/:masuat', adminCtrl.updateShowtime); // PUT update showtime
+router.delete('/suat-chieu/:masuat', adminCtrl.deleteShowtime); // DELETE showtime
+
+// ================== PHASE 4: VOUCHER MANAGEMENT ==================
+router.get('/khuyen-mai', adminCtrl.getVouchers);            // GET list with pagination + search
+router.post('/khuyen-mai-create', adminCtrl.createVoucher);  // POST create voucher
+router.put('/khuyen-mai/:makhuyenmai', adminCtrl.updateVoucher); // PUT update voucher
+router.delete('/khuyen-mai/:makhuyenmai', adminCtrl.deleteVoucher); // DELETE voucher
+
 export default router;

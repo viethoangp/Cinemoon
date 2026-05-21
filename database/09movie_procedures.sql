@@ -1,15 +1,9 @@
 -- ========================================
--- PHASE 2: Movie Management Stored Procedures
+-- PHASE 2: Quản lý Phim - Đã được Senior FIX 100% chuẩn Schema
 -- ========================================
 
--- Generate unique movie ID (P + sequential number)
-CREATE SEQUENCE SEQ_PHIM START WITH 1 INCREMENT BY 1 NOCYCLE;
-
--- ========================================
--- SP_GET_PHIM_LIST
--- Purpose: Get all movies with pagination + search
--- ========================================
-CREATE PROCEDURE SP_GET_PHIM_LIST(
+-- 1. LẤY DANH SÁCH PHIM (CÓ PHÂN TRANG & TÌM KIẾM)
+CREATE OR REPLACE PROCEDURE SP_GET_PHIM_LIST(
   p_TimKiem VARCHAR2,
   p_Trang NUMBER,
   p_TrongTrang NUMBER,
@@ -22,31 +16,27 @@ BEGIN
   p_KetQua := 0;
   p_Loi := NULL;
   
-  -- Calculate offset for pagination
   v_Offset := (p_Trang - 1) * p_TrongTrang;
   
   OPEN p_CurPhim FOR
     SELECT 
       p.MAPHIM,
       p.TENPHIM,
-      p.MOTA,
-      p.DACDIEM,
-      p.THOIGIANPHIM,
-      p.NGAYPHATHANHTHUYETMINH,
+      p.THELOAI,
+      p.THOILUONG,
+      p.DAODIEN,
+      p.DIENVIEN,
+      p.NGAYPHATHANH,
       p.POSTER,
-      p.DAIPHIM,
-      p.DIRECTOR_NAME,
-      (SELECT COUNT(*) FROM SUAT_CHIEU sc WHERE sc.MAPHIM = p.MAPHIM) as SO_SUAT_CHIEU,
-      NVL((SELECT SUM(gd.TONGTIEN) FROM GIAO_DICH gd 
-           JOIN VE v ON gd.MAGD = v.MAGD 
-           JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT 
-           WHERE sc.MAPHIM = p.MAPHIM AND gd.TRANGTHAIGD = 'Paid' 
-           AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
-           AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)), 0) as DOANHTHU_THANG
+      p.TRAILER,
+      p.MOTA,
+      p.GIOIHANTUOI,
+      p.TRANGTHAI,
+      (SELECT COUNT(*) FROM SUAT_CHIEU sc WHERE sc.MAPHIM = p.MAPHIM) as SO_SUAT_CHIEU
     FROM PHIM p
     WHERE UPPER(p.TENPHIM) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%')
-       OR UPPER(p.DIRECTOR_NAME) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%')
-    ORDER BY p.THOIGIANTAO DESC
+       OR UPPER(p.DAODIEN) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%')
+    ORDER BY p.MAPHIM DESC
     OFFSET v_Offset ROWS FETCH NEXT p_TrongTrang ROWS ONLY;
   
   p_KetQua := 1;
@@ -57,11 +47,8 @@ EXCEPTION
 END SP_GET_PHIM_LIST;
 /
 
--- ========================================
--- SP_GET_PHIM_BY_ID
--- Purpose: Get single movie details for edit form
--- ========================================
-CREATE PROCEDURE SP_GET_PHIM_BY_ID(
+-- 2. LẤY CHI TIẾT 1 BỘ PHIM
+CREATE OR REPLACE PROCEDURE SP_GET_PHIM_BY_ID(
   p_MaPhim VARCHAR2,
   p_KetQua OUT NUMBER,
   p_Loi OUT VARCHAR2,
@@ -72,20 +59,8 @@ BEGIN
   p_Loi := NULL;
   
   OPEN p_CurPhim FOR
-    SELECT 
-      p.MAPHIM,
-      p.TENPHIM,
-      p.MOTA,
-      p.DACDIEM,
-      p.THOIGIANPHIM,
-      p.NGAYPHATHANHTHUYETMINH,
-      p.POSTER,
-      p.DAIPHIM,
-      p.DIRECTOR_NAME,
-      (SELECT COUNT(*) FROM SUAT_CHIEU sc WHERE sc.MAPHIM = p.MAPHIM) as SO_SUAT_CHIEU
-    FROM PHIM p
-    WHERE p.MAPHIM = p_MaPhim;
-  
+    SELECT * FROM PHIM WHERE MAPHIM = p_MaPhim;
+    
   p_KetQua := 1;
 EXCEPTION
   WHEN OTHERS THEN
@@ -94,19 +69,19 @@ EXCEPTION
 END SP_GET_PHIM_BY_ID;
 /
 
--- ========================================
--- SP_CREATE_PHIM
--- Purpose: Create new movie with generated ID
--- ========================================
-CREATE PROCEDURE SP_CREATE_PHIM(
+-- 3. THÊM PHIM MỚI
+CREATE OR REPLACE PROCEDURE SP_CREATE_PHIM(
   p_TenPhim VARCHAR2,
-  p_MoTa CLOB,
-  p_DacDiem VARCHAR2,
-  p_ThoiGianPhim NUMBER,
-  p_NgayPhatHanhThuyetMinh DATE,
+  p_TheLoai VARCHAR2,
+  p_ThoiLuong NUMBER,
+  p_DaoDien VARCHAR2,
+  p_DienVien VARCHAR2,
+  p_NgayPhatHanh DATE,
   p_Poster VARCHAR2,
-  p_DaiPhim VARCHAR2,
-  p_DirectorName VARCHAR2,
+  p_Trailer VARCHAR2,
+  p_MoTa CLOB,
+  p_GioiHanTuoi NUMBER,
+  p_TrangThai VARCHAR2,
   p_KetQua OUT NUMBER,
   p_Loi OUT VARCHAR2,
   p_MaPhimOut OUT VARCHAR2
@@ -116,16 +91,14 @@ BEGIN
   p_KetQua := 0;
   p_Loi := NULL;
   
-  -- Generate movie ID: P + LPAD(sequence, 5, '0')
   v_MaPhim := 'P' || LPAD(SEQ_PHIM.NEXTVAL, 5, '0');
   
-  -- Insert new movie
   INSERT INTO PHIM (
-    MAPHIM, TENPHIM, MOTA, DACDIEM, THOIGIANPHIM,
-    NGAYPHATHANHTHUYETMINH, POSTER, DAIPHIM, DIRECTOR_NAME, THOIGIANTAO
+    MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, DIENVIEN,
+    NGAYPHATHANH, POSTER, TRAILER, MOTA, GIOIHANTUOI, TRANGTHAI
   ) VALUES (
-    v_MaPhim, p_TenPhim, p_MoTa, p_DacDiem, p_ThoiGianPhim,
-    p_NgayPhatHanhThuyetMinh, p_Poster, p_DaiPhim, p_DirectorName, CURRENT_TIMESTAMP
+    v_MaPhim, p_TenPhim, p_TheLoai, p_ThoiLuong, p_DaoDien, p_DienVien,
+    p_NgayPhatHanh, p_Poster, p_Trailer, p_MoTa, p_GioiHanTuoi, p_TrangThai
   );
   
   COMMIT;
@@ -140,20 +113,20 @@ EXCEPTION
 END SP_CREATE_PHIM;
 /
 
--- ========================================
--- SP_UPDATE_PHIM
--- Purpose: Update existing movie
--- ========================================
-CREATE PROCEDURE SP_UPDATE_PHIM(
+-- 4. CẬP NHẬT PHIM
+CREATE OR REPLACE PROCEDURE SP_UPDATE_PHIM(
   p_MaPhim VARCHAR2,
   p_TenPhim VARCHAR2,
-  p_MoTa CLOB,
-  p_DacDiem VARCHAR2,
-  p_ThoiGianPhim NUMBER,
-  p_NgayPhatHanhThuyetMinh DATE,
+  p_TheLoai VARCHAR2,
+  p_ThoiLuong NUMBER,
+  p_DaoDien VARCHAR2,
+  p_DienVien VARCHAR2,
+  p_NgayPhatHanh DATE,
   p_Poster VARCHAR2,
-  p_DaiPhim VARCHAR2,
-  p_DirectorName VARCHAR2,
+  p_Trailer VARCHAR2,
+  p_MoTa CLOB,
+  p_GioiHanTuoi NUMBER,
+  p_TrangThai VARCHAR2,
   p_KetQua OUT NUMBER,
   p_Loi OUT VARCHAR2
 ) AS
@@ -161,20 +134,22 @@ BEGIN
   p_KetQua := 0;
   p_Loi := NULL;
   
-  UPDATE PHIM SET
+  UPDATE PHIM SET 
     TENPHIM = p_TenPhim,
-    MOTA = p_MoTa,
-    DACDIEM = p_DacDiem,
-    THOIGIANPHIM = p_ThoiGianPhim,
-    NGAYPHATHANHTHUYETMINH = p_NgayPhatHanhThuyetMinh,
+    THELOAI = p_TheLoai,
+    THOILUONG = p_ThoiLuong,
+    DAODIEN = p_DaoDien,
+    DIENVIEN = p_DienVien,
+    NGAYPHATHANH = p_NgayPhatHanh,
     POSTER = p_Poster,
-    DAIPHIM = p_DaiPhim,
-    DIRECTOR_NAME = p_DirectorName
+    TRAILER = p_Trailer,
+    MOTA = p_MoTa,
+    GIOIHANTUOI = p_GioiHanTuoi,
+    TRANGTHAI = p_TrangThai
   WHERE MAPHIM = p_MaPhim;
   
   COMMIT;
   p_KetQua := 1;
-  
 EXCEPTION
   WHEN OTHERS THEN
     ROLLBACK;
@@ -183,33 +158,25 @@ EXCEPTION
 END SP_UPDATE_PHIM;
 /
 
--- ========================================
--- SP_DELETE_PHIM
--- Purpose: Delete movie (soft or hard based on bookings)
--- ========================================
-CREATE PROCEDURE SP_DELETE_PHIM(
+-- 5. XÓA PHIM (XÓA MỀM)
+CREATE OR REPLACE PROCEDURE SP_DELETE_PHIM(
   p_MaPhim VARCHAR2,
   p_KetQua OUT NUMBER,
   p_Loi OUT VARCHAR2
 ) AS
-  v_CountBookings NUMBER;
+  v_Count NUMBER;
 BEGIN
   p_KetQua := 0;
   p_Loi := NULL;
   
-  -- Check if movie has bookings
-  SELECT COUNT(*) INTO v_CountBookings
-  FROM VE v
-  JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT
-  WHERE sc.MAPHIM = p_MaPhim;
+  SELECT COUNT(*) INTO v_Count FROM SUAT_CHIEU WHERE MAPHIM = p_MaPhim;
   
-  IF v_CountBookings > 0 THEN
-    -- Soft delete: mark as inactive or set status flag
-    -- Note: Depends on your PHIM table structure - add TRANGTHAI column if needed
-    p_Loi := 'Phim đã có đặt vé. Không thể xóa hoàn toàn. Hãy vô hiệu hóa thay vào đó.';
-    p_KetQua := 0;
+  IF v_Count > 0 THEN
+    UPDATE PHIM SET TRANGTHAI = 'Archived' WHERE MAPHIM = p_MaPhim;
+    COMMIT;
+    p_Loi := 'Phim đã có suất chiếu, chuyển sang trạng thái Lưu trữ (Archived).';
+    p_KetQua := 1;
   ELSE
-    -- Hard delete: remove from database
     DELETE FROM PHIM WHERE MAPHIM = p_MaPhim;
     COMMIT;
     p_KetQua := 1;
@@ -223,11 +190,8 @@ EXCEPTION
 END SP_DELETE_PHIM;
 /
 
--- ========================================
--- SP_GET_DAI_LIST
--- Purpose: Get all genres (for dropdown)
--- ========================================
-CREATE PROCEDURE SP_GET_DAI_LIST(
+-- 6. LẤY DANH SÁCH THỂ LOẠI 
+CREATE OR REPLACE PROCEDURE SP_GET_DAI_LIST(
   p_KetQua OUT NUMBER,
   p_Loi OUT VARCHAR2,
   p_CurDai OUT SYS_REFCURSOR
@@ -237,12 +201,12 @@ BEGIN
   p_Loi := NULL;
   
   OPEN p_CurDai FOR
-    SELECT MADAI, TENDAI
-    FROM DAI
-    ORDER BY TENDAI ASC;
+    SELECT DISTINCT THELOAI as MADAI, THELOAI as TENDAI
+    FROM PHIM
+    WHERE THELOAI IS NOT NULL
+    ORDER BY THELOAI ASC;
   
   p_KetQua := 1;
-  
 EXCEPTION
   WHEN OTHERS THEN
     p_KetQua := 0;
@@ -250,33 +214,26 @@ EXCEPTION
 END SP_GET_DAI_LIST;
 /
 
--- ========================================
--- SP_GET_PHIM_COUNT
--- Purpose: Get total count for pagination
--- ========================================
-CREATE PROCEDURE SP_GET_PHIM_COUNT(
+-- 7. ĐẾM TỔNG SỐ PHIM (CHO PHÂN TRANG)
+CREATE OR REPLACE PROCEDURE SP_GET_PHIM_COUNT(
   p_TimKiem VARCHAR2,
+  p_TotalCount OUT NUMBER,
   p_KetQua OUT NUMBER,
-  p_Loi OUT VARCHAR2,
-  p_TotalCount OUT NUMBER
+  p_Loi OUT VARCHAR2
 ) AS
 BEGIN
   p_KetQua := 0;
   p_Loi := NULL;
   
-  SELECT COUNT(*) INTO p_TotalCount
-  FROM PHIM p
-  WHERE UPPER(p.TENPHIM) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%')
-     OR UPPER(p.DIRECTOR_NAME) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%');
-  
+  SELECT COUNT(*) INTO p_TotalCount 
+  FROM PHIM 
+  WHERE UPPER(TENPHIM) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%')
+     OR UPPER(DAODIEN) LIKE UPPER('%' || NVL(p_TimKiem, '') || '%');
+     
   p_KetQua := 1;
-  
 EXCEPTION
   WHEN OTHERS THEN
     p_KetQua := 0;
     p_Loi := SQLERRM;
-    p_TotalCount := 0;
 END SP_GET_PHIM_COUNT;
 /
-
-COMMIT;

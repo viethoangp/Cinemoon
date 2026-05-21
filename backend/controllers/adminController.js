@@ -1,6 +1,7 @@
 import { callStoredProcedure } from '../services/spService.js';
 import { SP_CATALOG } from '../config/constants.js';
 import { getOracle, getConnection } from '../config/db.js';
+import oracledb from 'oracledb';
 
 // Helper: Build response from SP result
 function buildResponse(spResult) {
@@ -694,29 +695,39 @@ export const getDashboardStats = async (req, res) => {
     connection = await getConnection();
     const oracledb = getOracle();
 
-    // Define all 6 dashboard queries
+    // Define all dashboard queries including annual and monthly
     const queries = {
-      revenue: `
-        SELECT COALESCE(SUM(gd.TONGTIEN), 0) as TONGTIEN_THANG
+      // PHASE 1: Annual KPIs for current year
+      annualRevenue: `
+        SELECT COALESCE(SUM(gd.TONGTIEN), 0) as TONGTIEN_NAM
         FROM GIAO_DICH gd
         WHERE gd.TRANGTHAIGD = 'Paid'
-          AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
           AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
       `,
-      totalTickets: `
-        SELECT COALESCE(COUNT(v.MAVE), 0) as TONG_VE
+      annualTickets: `
+        SELECT COALESCE(COUNT(v.MAVE), 0) as TONG_VE_NAM
         FROM VE v
         JOIN GIAO_DICH gd ON v.MAGD = gd.MAGD
         WHERE gd.TRANGTHAIGD = 'Paid'
-          AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
           AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
       `,
-      newCustomers: `
-        SELECT COALESCE(COUNT(DISTINCT kh.MAKH), 0) as KH_MOI
+      annualUsers: `
+        SELECT COALESCE(COUNT(DISTINCT kh.MAKH), 0) as KH_MOI_NAM
         FROM KHACH_HANG kh
         JOIN TAI_KHOAN tk ON kh.MATK = tk.MATK
-        WHERE EXTRACT(MONTH FROM tk.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
-          AND EXTRACT(YEAR FROM tk.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+        WHERE EXTRACT(YEAR FROM tk.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+      `,
+      // Monthly revenue breakdown for line chart
+      monthlyRevenue: `
+        SELECT 
+          EXTRACT(MONTH FROM gd.THOIGIANTAO) as thang,
+          COALESCE(SUM(gd.TONGTIEN), 0) as doanhthu
+        FROM GIAO_DICH gd
+        WHERE gd.TRANGTHAIGD = 'Paid'
+          AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+        GROUP BY EXTRACT(MONTH FROM gd.THOIGIANTAO)
+        ORDER BY thang ASC
+        FETCH FIRST 12 ROWS ONLY
       `,
       topMovies: `
         SELECT 
@@ -767,26 +778,37 @@ export const getDashboardStats = async (req, res) => {
       `,
     };
 
-    // Execute all 6 queries in PARALLEL using Promise.all()
+    // Execute all queries in PARALLEL using Promise.all()
     const results = await Promise.all([
-      connection.execute(queries.revenue, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
-      connection.execute(queries.totalTickets, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
-      connection.execute(queries.newCustomers, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.annualRevenue, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.annualTickets, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.annualUsers, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(queries.monthlyRevenue, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
       connection.execute(queries.topMovies, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
       connection.execute(queries.topCustomers, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
       connection.execute(queries.occupancyRate, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }),
     ]);
 
     // Extract data from each query result
-    const [revenueRes, ticketsRes, customersRes, moviesRes, customersTopRes, occupancyRes] = results;
+    const [annualRevRes, annualTicketsRes, annualUsersRes, monthlyRevenueRes, moviesRes, customersTopRes, occupancyRes] = results;
+
+    // Ensure all 12 months are represented in monthly revenue (fill missing months with 0)
+    const monthlyData = Array.from({ length: 12 }, (_, i) => {
+      const found = monthlyRevenueRes.rows.find(row => row.THANG === i + 1);
+      return {
+        month: i + 1,
+        revenue: found ? found.DOANHTHU : 0,
+      };
+    });
 
     // Format response data cleanly as JavaScript objects/arrays
     const statsData = {
       kpi: {
-        revenue: revenueRes.rows[0]?.TONGTIEN_THANG || 0,
-        totalTickets: ticketsRes.rows[0]?.TONG_VE || 0,
-        newCustomers: customersRes.rows[0]?.KH_MOI || 0,
+        revenue: annualRevRes.rows[0]?.TONGTIEN_NAM || 0,
+        totalTickets: annualTicketsRes.rows[0]?.TONG_VE_NAM || 0,
+        newCustomers: annualUsersRes.rows[0]?.KH_MOI_NAM || 0,
       },
+      monthlyRevenue: monthlyData,
       topMovies: moviesRes.rows.map(row => ({
         maphim: row.MAPHIM,
         tenphim: row.TENPHIM,
@@ -828,5 +850,764 @@ export const getDashboardStats = async (req, res) => {
         console.error('Lỗi khi đóng connection:', closeError);
       }
     }
+  }
+};
+
+// ================== PHASE 2: MOVIES MANAGEMENT ==================
+
+/**
+ * GET /api/admin/phim
+ * Fetch movies list with pagination + search
+ * Query params: search, page, limit
+ */
+export const getMovies = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { search = '', page = 1, limit = 10 } = req.query;
+
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(*) as TOTAL
+      FROM PHIM p
+      WHERE UPPER(p.TENPHIM) LIKE UPPER('%' || NVL(:search, '') || '%')
+         OR UPPER(p.DAODIEN) LIKE UPPER('%' || NVL(:search, '') || '%')
+    `;
+
+    const countResult = await connection.execute(countQuery, { search }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const totalCount = countResult.rows[0]?.TOTAL || 0;
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get paginated movies
+    const offset = (page - 1) * limit;
+    const query = `
+      SELECT 
+        p.MAPHIM,
+        p.TENPHIM,
+        p.MOTA,
+        p.THOILUONG,
+        p.NGAYPHATHANH,
+        p.POSTER,
+        p.THELOAI,
+        p.DAODIEN,
+        p.GIOIHANTUOI,
+        p.TRANGTHAI,
+        (SELECT COUNT(*) FROM SUAT_CHIEU sc WHERE sc.MAPHIM = p.MAPHIM) as SO_SUAT_CHIEU,
+        NVL((SELECT SUM(gd.TONGTIEN) FROM GIAO_DICH gd 
+             JOIN VE v ON gd.MAGD = v.MAGD 
+             JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT 
+             WHERE sc.MAPHIM = p.MAPHIM AND gd.TRANGTHAIGD = 'Paid' 
+             AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
+             AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)), 0) as DOANHTHU_THANG
+      FROM PHIM p
+      WHERE UPPER(p.TENPHIM) LIKE UPPER('%' || NVL(:search, '') || '%')
+         OR UPPER(p.DAODIEN) LIKE UPPER('%' || NVL(:search, '') || '%')
+      ORDER BY p.MAPHIM DESC
+      OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+    `;
+
+    const result = await connection.execute(query, 
+      { search, offset, limit }, 
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    const movies = result.rows.map(row => ({
+      maphim: row.MAPHIM,
+      tenphim: row.TENPHIM,
+      poster: row.POSTER,
+      thoigianphim: row.THOILUONG,
+      ngayPhatHanhThuyetMinh: row.NGAYPHATHANH,
+      daiPhim: row.THELOAI,
+      directorName: row.DAODIEN,
+      soSuatChieu: row.SO_SUAT_CHIEU,
+      doanhThuThang: row.DOANHTHU_THANG,
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy danh sách phim thành công.',
+      data: {
+        movies,
+        totalCount,
+        currentPage: parseInt(page),
+        totalPages,
+      },
+    });
+  } catch (error) {
+    console.error('Lỗi getMovies:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeError) {
+        console.error('Lỗi khi đóng connection:', closeError);
+      }
+    }
+  }
+};
+
+/**
+ * GET /api/admin/phim/:maphim
+ * Fetch single movie details for edit form
+ */
+export const getMovieById = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { maphim } = req.params;
+
+    if (!maphim) {
+      return res.status(400).json({ success: false, message: 'Thiếu tham số maphim.' });
+    }
+
+    const query = `
+      SELECT 
+        p.MAPHIM,
+        p.TENPHIM,
+        p.MOTA,
+        p.THOILUONG,
+        p.NGAYPHATHANH,
+        p.POSTER,
+        p.THELOAI,
+        p.DAODIEN,
+        p.GIOIHANTUOI,
+        p.TRANGTHAI,
+        (SELECT COUNT(*) FROM SUAT_CHIEU sc WHERE sc.MAPHIM = p.MAPHIM) as SO_SUAT_CHIEU
+      FROM PHIM p
+      WHERE p.MAPHIM = :maphim
+    `;
+
+    const result = await connection.execute(query, { maphim }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Phim không tìm thấy.' });
+    }
+
+    const row = result.rows[0];
+    const movie = {
+      maphim: row.MAPHIM,
+      tenphim: row.TENPHIM,
+      mota: row.MOTA,
+      thoigianphim: row.THOILUONG,
+      ngayPhatHanhThuyetMinh: row.NGAYPHATHANH,
+      poster: row.POSTER,
+      daiPhim: row.THELOAI,
+      directorName: row.DAODIEN,
+      gioihantuoi: row.GIOIHANTUOI,
+      trangthai: row.TRANGTHAI,
+      soSuatChieu: row.SO_SUAT_CHIEU,
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy chi tiết phim thành công.',
+      data: movie,
+    });
+  } catch (error) {
+    console.error('Lỗi getMovieById:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeError) {
+        console.error('Lỗi khi đóng connection:', closeError);
+      }
+    }
+  }
+};
+
+/**
+ * POST /api/admin/phim-create
+ * Create new movie using direct SQL INSERT
+ */
+export const createMovieWithApi = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { tenphim, mota, thoigianphim, ngayPhatHanhThuyetMinh, poster, daiPhim, directorName } = req.body;
+
+    if (!tenphim || !thoigianphim) {
+      return res.status(400).json({ success: false, message: 'Thiếu tham số tenphim hoặc thoigianphim.' });
+    }
+
+    // Generate MAPHIM using sequence
+    const seqResult = await connection.execute('SELECT \'P\' || LPAD(SEQ_PHIM.NEXTVAL, 5, \'0\') as MAPHIM FROM DUAL', [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const maphim = seqResult.rows[0]?.MAPHIM;
+
+    // Insert movie
+    const query = `
+      INSERT INTO PHIM (MAPHIM, TENPHIM, THELOAI, THOILUONG, DAODIEN, NGAYPHATHANH, POSTER, MOTA, TRANGTHAI)
+      VALUES (:maphim, :tenphim, :theloai, :thoiluong, :daodien, :ngayphathanh, :poster, :mota, :trangthai)
+    `;
+
+    await connection.execute(query, {
+      maphim,
+      tenphim,
+      theloai: daiPhim || null,
+      thoiluong: thoigianphim,
+      daodien: directorName || null,
+      ngayphathanh: ngayPhatHanhThuyetMinh || null,
+      poster: poster || null,
+      mota: mota || null,
+      trangthai: 'Upcoming',
+    });
+
+    await connection.commit();
+
+    res.status(201).json({
+      success: true,
+      message: 'Tạo phim mới thành công.',
+      data: { maphim, tenphim },
+    });
+  } catch (error) {
+    console.error('Lỗi createMovieWithApi:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeError) {
+        console.error('Lỗi khi đóng connection:', closeError);
+      }
+    }
+  }
+};
+
+/**
+ * PUT /api/admin/phim/:maphim
+ * Update movie using direct SQL UPDATE
+ */
+export const updateMovieWithApi = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const { maphim } = req.params;
+    const { tenphim, mota, thoigianphim, ngayPhatHanhThuyetMinh, poster, daiPhim, directorName } = req.body;
+
+    if (!maphim || !tenphim) {
+      return res.status(400).json({ success: false, message: 'Thiếu tham số maphim hoặc tenphim.' });
+    }
+
+    const query = `
+      UPDATE PHIM
+      SET TENPHIM = :tenphim,
+          THELOAI = :theloai,
+          THOILUONG = :thoiluong,
+          DAODIEN = :daodien,
+          NGAYPHATHANH = :ngayphathanh,
+          POSTER = :poster,
+          MOTA = :mota
+      WHERE MAPHIM = :maphim
+    `;
+
+    await connection.execute(query, {
+      maphim,
+      tenphim,
+      theloai: daiPhim || null,
+      thoiluong: thoigianphim,
+      daodien: directorName || null,
+      ngayphathanh: ngayPhatHanhThuyetMinh || null,
+      poster: poster || null,
+      mota: mota || null,
+    });
+
+    await connection.commit();
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật phim thành công.',
+      data: { maphim, tenphim },
+    });
+  } catch (error) {
+    console.error('Lỗi updateMovieWithApi:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeError) {
+        console.error('Lỗi khi đóng connection:', closeError);
+      }
+    }
+  }
+};
+
+/**
+ * DELETE /api/admin/phim/:maphim
+ * Delete movie using direct SQL DELETE
+ */
+export const deleteMovieWithApi = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const { maphim } = req.params;
+
+    if (!maphim) {
+      return res.status(400).json({ success: false, message: 'Thiếu tham số maphim.' });
+    }
+
+    // Check if movie has bookings
+    const checkQuery = `
+      SELECT COUNT(*) as COUNT
+      FROM VE v
+      JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT
+      WHERE sc.MAPHIM = :maphim
+    `;
+
+    const oracledb = getOracle();
+    const checkResult = await connection.execute(checkQuery, { maphim }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+    const bookingCount = checkResult.rows[0]?.COUNT || 0;
+
+    if (bookingCount > 0) {
+      return res.status(400).json({ success: false, message: 'Không thể xóa phim có vé đã bán.' });
+    }
+
+    // Delete the movie
+    const deleteQuery = `DELETE FROM PHIM WHERE MAPHIM = :maphim`;
+    await connection.execute(deleteQuery, { maphim });
+    await connection.commit();
+
+    res.status(200).json({
+      success: true,
+      message: 'Xóa phim thành công.',
+      data: { maphim },
+    });
+  } catch (error) {
+    console.error('Lỗi deleteMovieWithApi:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeError) {
+        console.error('Lỗi khi đóng connection:', closeError);
+      }
+    }
+  }
+};
+
+/**
+ * GET /api/admin/dai
+ * Get all genres/categories (mock data since DAI table doesn't exist)
+ */
+export const getGenres = async (req, res) => {
+  try {
+    // Return mock genres since DAI table doesn't exist in schema
+    const genres = [
+      { madai: 'ACTION', tendai: 'Hành động' },
+      { madai: 'COMEDY', tendai: 'Hài kịch' },
+      { madai: 'DRAMA', tendai: 'Chính kịch' },
+      { madai: 'HORROR', tendai: 'Kinh dị' },
+      { madai: 'ANIMATION', tendai: 'Hoạt hình' },
+      { madai: 'DOCUMENTARY', tendai: 'Phim tài liệu' },
+      { madai: 'ROMANCE', tendai: 'Tình cảm' },
+      { madai: 'SCIFI', tendai: 'Khoa học viễn tưởng' },
+      { madai: 'THRILLER', tendai: 'Giật gân' },
+      { madai: 'ADVENTURE', tendai: 'Phiêu lưu' },
+    ];
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy danh sách thể loại thành công.',
+      data: genres,
+    });
+  } catch (error) {
+    console.error('Lỗi getGenres:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  }
+};
+
+// ================== PHASE 3: SCHEDULE MANAGEMENT ==================
+
+export const getShowtimes = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { search = '', page = 1, limit = 10 } = req.query;
+
+    const query = `
+      BEGIN
+        SP_GET_SUAT_CHIEU_LIST(
+          :p_Search, :p_Page, :p_Limit,
+          :p_TotalCount, :p_TotalPages, :p_ResultSet, :p_KetQua, :p_Loi
+        );
+      END;
+    `;
+
+    const binds = {
+      p_Search: search,
+      p_Page: parseInt(page),
+      p_Limit: parseInt(limit),
+      p_TotalCount: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_TotalPages: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_ResultSet: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR },
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+
+    const result = await connection.execute(query, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.outBinds.p_KetQua === 1) {
+      const resultSet = result.outBinds.p_ResultSet;
+      const rows = await resultSet.getRows();
+      await resultSet.close();
+
+      const showtimes = rows.map(row => ({
+        masuat: row.MASUAT,
+        tenphim: row.TENPHIM,
+        maphong: row.MAPHONG,
+        ngaychieu: row.NGAYCHIEU,
+        giobatdau: row.GIOBATDAU,
+        gioketthuc: row.GIOKETTHUC,
+        soVeDaBan: row.SO_VE_BAN,
+        succhuaghe: row.SUCCHUAGHE,
+        tyLeLapDay: row.TY_LE_LAP_DAY
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          showtimes,
+          totalCount: result.outBinds.p_TotalCount,
+          totalPages: result.outBinds.p_TotalPages,
+          currentPage: parseInt(page)
+        }
+      });
+    } else {
+      res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+    }
+  } catch (error) {
+    console.error('Lỗi getShowtimes:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+export const getRooms = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+
+    const query = `BEGIN SP_GET_PHONG_CHIEU_LIST(:p_ResultSet, :p_KetQua, :p_Loi); END;`;
+    const binds = {
+      p_ResultSet: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR },
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+
+    const result = await connection.execute(query, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.outBinds.p_KetQua === 1) {
+      const resultSet = result.outBinds.p_ResultSet;
+      const rows = await resultSet.getRows();
+      await resultSet.close();
+
+      const rooms = rows.map(row => ({
+        maphong: row.MAPHONG,
+        tenrap: row.TENRAP,
+        succhuaghe: row.SUCCHUAGHE
+      }));
+
+      res.status(200).json({ success: true, data: rooms });
+    } else {
+      res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+    }
+  } catch (error) {
+    console.error('Lỗi getRooms:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+export const getMoviesDropdown = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+
+    const query = `BEGIN SP_GET_PHIM_DROPDOWN(:p_ResultSet, :p_KetQua, :p_Loi); END;`;
+    const binds = {
+      p_ResultSet: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR },
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+
+    const result = await connection.execute(query, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.outBinds.p_KetQua === 1) {
+      const resultSet = result.outBinds.p_ResultSet;
+      const rows = await resultSet.getRows();
+      await resultSet.close();
+
+      const movies = rows.map(row => ({
+        maphim: row.MAPHIM,
+        tenphim: row.TENPHIM,
+        thoiluong: row.THOILUONG
+      }));
+
+      res.status(200).json({ success: true, data: movies });
+    } else {
+      res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+    }
+  } catch (error) {
+    console.error('Lỗi getMoviesDropdown:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+export const createShowtime = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { maphim, maphong, ngaychieu, giobatdau, gioketthuc, trangthaisuat } = req.body;
+
+    // Fix Bug sai trạng thái từ Frontend gửi lên
+    const status = trangthaisuat === 'Active' ? 'Showing' : trangthaisuat;
+
+    const query = `BEGIN SP_THEM_SUAT_CHIEU(:p_MAPHIM, :p_MAPHONG, :p_NGAYCHIEU, :p_GIOBATDAU, :p_GIOKETTHUC, :p_TRANGTHAISUAT, :p_KetQua, :p_Loi, :p_MASUAT); END;`;
+    const binds = {
+      p_MAPHIM: maphim,
+      p_MAPHONG: maphong,
+      p_NGAYCHIEU: new Date(ngaychieu),
+      p_GIOBATDAU: new Date(`${ngaychieu}T${giobatdau}`),
+      p_GIOKETTHUC: new Date(`${ngaychieu}T${gioketthuc}`),
+      p_TRANGTHAISUAT: status,
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 },
+      p_MASUAT: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 20 }
+    };
+    
+    const result = await connection.execute(query, binds);
+    if (result.outBinds.p_KetQua === 1) res.status(201).json({ success: true, message: 'Thêm suất chiếu thành công!' });
+    else res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+  } catch (error) { 
+    console.error('Lỗi createShowtime:', error); 
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' }); 
+  } finally { 
+    if (connection) await connection.close(); 
+  }
+};
+
+export const updateShowtime = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { masuat } = req.params;
+    const { maphim, maphong, ngaychieu, giobatdau, gioketthuc, trangthaisuat } = req.body;
+
+    const status = trangthaisuat === 'Active' ? 'Showing' : trangthaisuat;
+
+    const query = `BEGIN SP_SUA_SUAT_CHIEU(:p_MASUAT, :p_MAPHIM, :p_MAPHONG, :p_NGAYCHIEU, :p_GIOBATDAU, :p_GIOKETTHUC, :p_TRANGTHAISUAT, :p_KetQua, :p_Loi); END;`;
+    const binds = {
+      p_MASUAT: masuat,
+      p_MAPHIM: maphim,
+      p_MAPHONG: maphong,
+      p_NGAYCHIEU: new Date(ngaychieu),
+      p_GIOBATDAU: new Date(`${ngaychieu}T${giobatdau}`),
+      p_GIOKETTHUC: new Date(`${ngaychieu}T${gioketthuc}`),
+      p_TRANGTHAISUAT: status,
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+    
+    const result = await connection.execute(query, binds);
+    if (result.outBinds.p_KetQua === 1) res.status(200).json({ success: true, message: 'Cập nhật thành công!' });
+    else res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+  } catch (error) { 
+    console.error('Lỗi updateShowtime:', error); 
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' }); 
+  } finally { 
+    if (connection) await connection.close(); 
+  }
+};
+
+export const deleteShowtime = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { masuat } = req.params;
+
+    const query = `BEGIN SP_XOA_SUAT_CHIEU(:p_MASUAT, :p_KetQua, :p_Loi); END;`;
+    const binds = {
+      p_MASUAT: masuat,
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+    
+    const result = await connection.execute(query, binds);
+    if (result.outBinds.p_KetQua === 1) res.status(200).json({ success: true, message: 'Xóa thành công!' });
+    else res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+  } catch (error) { 
+    console.error('Lỗi deleteShowtime:', error); 
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' }); 
+  } finally { 
+    if (connection) await connection.close(); 
+  }
+};
+
+// ================== PHASE 4: VOUCHER MANAGEMENT ==================
+
+export const getVouchers = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { search = '', page = 1, limit = 10 } = req.query;
+
+    const query = `
+      BEGIN
+        SP_GET_KHUYEN_MAI_LIST(
+          :p_Search, :p_Page, :p_Limit,
+          :p_TotalCount, :p_TotalPages, :p_ResultSet, :p_KetQua, :p_Loi
+        );
+      END;
+    `;
+
+    const binds = {
+      p_Search: search,
+      p_Page: parseInt(page),
+      p_Limit: parseInt(limit),
+      p_TotalCount: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_TotalPages: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_ResultSet: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR },
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+
+    const result = await connection.execute(query, binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.outBinds.p_KetQua === 1) {
+      const resultSet = result.outBinds.p_ResultSet;
+      const rows = await resultSet.getRows();
+      await resultSet.close();
+
+      const vouchers = rows.map(row => ({
+        makhuyenmai: row.MAKHUYENMAI,
+        tenchuongtrinh: row.TENCHUONGTRINH,
+        giatrigiam: row.GIATRIGIAM,
+        dieukienapdung: row.DIEUKIENAPDUNG,
+        ngaybatdau: row.NGAYBATDAU,
+        ngayketthuc: row.NGAYKETTHUC,
+        soLanSuDung: row.SO_LAN_SU_DUNG,
+        trangThai: row.TRANG_THAI
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          vouchers,
+          totalCount: result.outBinds.p_TotalCount,
+          totalPages: result.outBinds.p_TotalPages,
+          currentPage: parseInt(page)
+        }
+      });
+    } else {
+      res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+    }
+  } catch (error) {
+    console.error('Lỗi getVouchers:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+export const createVoucher = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { tenchuongtrinh, giatrigiam, dieukienapdung, ngaybatdau, ngayketthuc } = req.body;
+
+    const query = `BEGIN SP_THEM_KHUYEN_MAI(:p_TENCHUONGTRINH, :p_GIATRIGIAM, :p_DIEUKIENAPDUNG, :p_NGAYBATDAU, :p_NGAYKETTHUC, :p_KetQua, :p_Loi, :p_MAKHUYENMAI); END;`;
+    const binds = {
+      p_TENCHUONGTRINH: tenchuongtrinh,
+      p_GIATRIGIAM: Number(giatrigiam) || 0,        // FIX: Ép kiểu an toàn sang Số
+      p_DIEUKIENAPDUNG: Number(dieukienapdung) || 0, // FIX: Ép kiểu an toàn sang Số
+      p_NGAYBATDAU: new Date(ngaybatdau),
+      p_NGAYKETTHUC: new Date(ngayketthuc),
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 },
+      p_MAKHUYENMAI: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 20 }
+    };
+    
+    const result = await connection.execute(query, binds);
+    if (result.outBinds.p_KetQua === 1) res.status(201).json({ success: true, message: 'Thêm Voucher thành công!' });
+    else res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+  } catch (error) { 
+    console.error('Lỗi createVoucher:', error); 
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' }); 
+  } finally { 
+    if (connection) await connection.close(); 
+  }
+};
+
+export const updateVoucher = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { makhuyenmai } = req.params;
+    const { tenchuongtrinh, giatrigiam, dieukienapdung, ngaybatdau, ngayketthuc } = req.body;
+
+    const query = `BEGIN SP_SUA_KHUYEN_MAI(:p_MAKHUYENMAI, :p_TENCHUONGTRINH, :p_GIATRIGIAM, :p_DIEUKIENAPDUNG, :p_NGAYBATDAU, :p_NGAYKETTHUC, :p_KetQua, :p_Loi); END;`;
+    const binds = {
+      p_MAKHUYENMAI: makhuyenmai,
+      p_TENCHUONGTRINH: tenchuongtrinh,
+      p_GIATRIGIAM: Number(giatrigiam) || 0,        // FIX: Ép kiểu an toàn sang Số
+      p_DIEUKIENAPDUNG: Number(dieukienapdung) || 0, // FIX: Ép kiểu an toàn sang Số
+      p_NGAYBATDAU: new Date(ngaybatdau),
+      p_NGAYKETTHUC: new Date(ngayketthuc),
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+    
+    const result = await connection.execute(query, binds);
+    if (result.outBinds.p_KetQua === 1) res.status(200).json({ success: true, message: 'Cập nhật thành công!' });
+    else res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+  } catch (error) { 
+    console.error('Lỗi updateVoucher:', error); 
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' }); 
+  } finally { 
+    if (connection) await connection.close(); 
+  }
+};
+
+export const deleteVoucher = async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const oracledb = getOracle();
+    const { makhuyenmai } = req.params;
+
+    const query = `BEGIN SP_XOA_KHUYEN_MAI(:p_MAKHUYENMAI, :p_KetQua, :p_Loi); END;`;
+    const binds = {
+      p_MAKHUYENMAI: makhuyenmai,
+      p_KetQua: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      p_Loi: { dir: oracledb.BIND_OUT, type: oracledb.STRING, maxSize: 4000 }
+    };
+    
+    const result = await connection.execute(query, binds);
+    if (result.outBinds.p_KetQua === 1) res.status(200).json({ success: true, message: 'Xóa thành công!' });
+    else res.status(400).json({ success: false, message: result.outBinds.p_Loi });
+  } catch (error) { 
+    console.error('Lỗi deleteVoucher:', error); 
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' }); 
+  } finally { 
+    if (connection) await connection.close(); 
   }
 };
