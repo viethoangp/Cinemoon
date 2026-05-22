@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { catalogAPI, authAPI, ApiMovie, ApiShowtime, ApiCinema } from '../../services/api';
 import { transformMoviesFromAPI, filterMoviesByStatus, mapCinemaData } from '../../utils/transformers';
 import { saveToken, getToken, saveUser, getUser, clearToken, clearUser, User as TokenUser, logout as tokenLogout } from '../../utils/token';
@@ -345,7 +345,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
-  const addNotification = (message: string, type: 'success' | 'error' | 'info' | 'warning', duration = 3000) => {
+  const removeNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning', duration = 3000) => {
     const id = Date.now().toString();
     const newNotification: Notification = { id, message, type, duration };
     setNotifications(prev => [...prev, newNotification]);
@@ -356,11 +360,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         removeNotification(id);
       }, duration);
     }
-  };
-
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  }, [removeNotification]);
 
   return (
     <AppContext.Provider value={{

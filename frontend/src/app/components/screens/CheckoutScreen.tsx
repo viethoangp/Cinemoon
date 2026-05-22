@@ -69,6 +69,7 @@ export const CheckoutScreen = () => {
   // Success State
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [hasShownNotification, setHasShownNotification] = useState(false);
 
   const selectedSeatObjects = roomSeats.filter(seat => selectedSeats.includes(seat.MAGHE));
 
@@ -78,12 +79,14 @@ export const CheckoutScreen = () => {
     return 'LG001';
   };
 
-  // Trigger notification when booking is confirmed
+  // Trigger notification when booking is confirmed (only once)
   useEffect(() => {
-    if (isConfirmed && bookingId) {
+    if (isConfirmed && bookingId && !hasShownNotification) {
       addNotification(`✓ Đặt vé thành công! Mã vé: ${bookingId}`, 'success', 5000);
+      setHasShownNotification(true);
     }
-  }, [isConfirmed, bookingId, addNotification]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed, bookingId, hasShownNotification]);
 
   useEffect(() => {
     const fetchSeatData = async () => {

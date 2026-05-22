@@ -117,7 +117,7 @@ export const SeatMapScreen = () => {
         // CHUẨN HÓA VÀ PHỤC DỰNG DỮ LIỆU
         const safeSeats: ApiSeat[] = rawData.map((s: any, index: number) => {
           const maGhe = s.MAGHE || s.maghe || s.id || `MOCK_${index}`;
-          let tenGhe = s.TENGHE || s.tenghe || s.name || '';
+          let tenGhe = s.TENGHE || s.tenghe || s.VITRI || s.vitri || s.name || '';
 
           // THUẬT TOÁN BIẾN GHE001 -> A1
           if (!tenGhe && maGhe.toUpperCase().includes('GHE')) {
@@ -321,8 +321,8 @@ export const SeatMapScreen = () => {
       {/* Main content */}
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
         {/* LEFT: Seat map */}
-        <div className="flex-1 flex flex-col items-center overflow-auto py-6 px-4 md:px-8">
-          <div className="w-full max-w-2xl mb-8">
+        <div className="flex-1 flex flex-col items-center overflow-auto py-6 px-4">
+          <div className="w-full mb-6" style={{ maxWidth: '600px' }}>
             <div className="relative h-6 md:h-10 mx-8" style={{
                 background: 'linear-gradient(to bottom, rgba(229,9,20,0.15), transparent)',
                 borderRadius: '50% 50% 0 0 / 100% 100% 0 0',
@@ -334,49 +334,129 @@ export const SeatMapScreen = () => {
           </div>
 
           {loading ? (
-             <div className="flex-1 flex items-center justify-center">
-               <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin" />
-             </div>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : (
-            <div className="w-full max-w-2xl pb-10">
-              {rows.map((rowLabel) => (
-                <div key={rowLabel} className="flex items-center gap-1.5 md:gap-2 mb-2 justify-center">
-                  <span className="w-4 md:w-6 text-gray-600 text-xs text-center flex-shrink-0">{rowLabel}</span>
-                  <div className="flex gap-1 md:gap-1.5 justify-center">
-                    {groupedSeats[rowLabel]
-                      .sort((a, b) => a.TENGHE.localeCompare(b.TENGHE, undefined, { numeric: true }))
-                      .map((seat, idx) => {
+            /* Bọc ngoài: chiếm toàn bộ chiều rộng, padding nhỏ, không scroll ngang */
+            <div className="w-full pb-10" style={{ maxWidth: '600px' }}>
+              {rows.map((rowLabel) => {
+                const rowSeats = groupedSeats[rowLabel]
+                  .sort((a, b) => a.TENGHE.localeCompare(b.TENGHE, undefined, { numeric: true }));
+
+                return (
+                  <div key={rowLabel} className="flex items-center mb-[5px]">
+                    {/* Label hàng bên trái - cố định 20px */}
+                    <span
+                      className="text-gray-500 text-[11px] font-medium text-center flex-shrink-0 select-none"
+                      style={{ width: '20px' }}
+                    >
+                      {rowLabel}
+                    </span>
+
+                    {/* Lối đi trái (cột 1-4) */}
+                    <div className="flex gap-[3px] flex-shrink-0">
+                      {rowSeats.slice(0, 4).map((seat) => {
                         const status = getSeatStatus(seat);
                         const isVip = status === 'vip-available';
-                        const gap = idx === 3 || idx === 9; // Lối đi phụ
-                        
                         return (
-                          <React.Fragment key={seat.MAGHE}>
-                            {gap && <div className="w-2 md:w-4" />}
-                            <button
-                              onClick={() => handleSeatClick(seat.MAGHE)}
-                              disabled={status === 'booked'}
-                              className={`
-                                w-6 h-6 md:w-7 md:h-6 rounded-t text-[8px] md:text-[9px] font-medium transition-all
-                                ${status === 'booked'
-                                  ? 'bg-[#E50914]/80 text-white cursor-not-allowed'
-                                  : status === 'selected'
-                                    ? 'bg-[#F5C518] text-[#121212] shadow-md shadow-yellow-500/40 scale-110'
-                                    : isVip
-                                      ? 'bg-[#2A1F00] border border-[#F5C518]/40 text-[#F5C518]/70 hover:bg-[#F5C518]/20 hover:border-[#F5C518] hover:text-[#F5C518]'
-                                      : 'bg-[#252525] border border-[#3A3A3A] text-gray-600 hover:bg-[#3A3A3A] hover:text-white hover:border-gray-500'
-                                }
-                              `}
-                            >
-                              {seat.TENGHE.replace(/[A-Z]/, '')}
-                            </button>
-                          </React.Fragment>
+                          <button
+                            key={seat.MAGHE}
+                            onClick={() => handleSeatClick(seat.MAGHE)}
+                            disabled={status === 'booked'}
+                            title={seat.TENGHE}
+                            className={`
+                              w-[38px] h-[28px] rounded-t text-[9px] font-medium transition-all flex-shrink-0
+                              ${status === 'booked'
+                                ? 'bg-[#E50914]/80 text-white cursor-not-allowed'
+                                : status === 'selected'
+                                  ? 'bg-[#F5C518] text-[#121212] shadow-md shadow-yellow-500/40 scale-105'
+                                  : isVip
+                                    ? 'bg-[#2A1F00] border border-[#F5C518]/40 text-[#F5C518]/70 hover:bg-[#F5C518]/20 hover:border-[#F5C518] hover:text-[#F5C518]'
+                                    : 'bg-[#252525] border border-[#3A3A3A] text-gray-500 hover:bg-[#3A3A3A] hover:text-white hover:border-gray-500'
+                              }
+                            `}
+                          >
+                            {seat.TENGHE.replace(/[A-Za-z]/, '')}
+                          </button>
                         );
-                    })}
+                      })}
+                    </div>
+
+                    {/* Lối đi giữa */}
+                    <div className="flex-shrink-0" style={{ width: '16px' }} />
+
+                    {/* Giữa (cột 5-8) */}
+                    <div className="flex gap-[3px] flex-shrink-0">
+                      {rowSeats.slice(4, 8).map((seat) => {
+                        const status = getSeatStatus(seat);
+                        const isVip = status === 'vip-available';
+                        return (
+                          <button
+                            key={seat.MAGHE}
+                            onClick={() => handleSeatClick(seat.MAGHE)}
+                            disabled={status === 'booked'}
+                            title={seat.TENGHE}
+                            className={`
+                              w-[38px] h-[28px] rounded-t text-[9px] font-medium transition-all flex-shrink-0
+                              ${status === 'booked'
+                                ? 'bg-[#E50914]/80 text-white cursor-not-allowed'
+                                : status === 'selected'
+                                  ? 'bg-[#F5C518] text-[#121212] shadow-md shadow-yellow-500/40 scale-105'
+                                  : isVip
+                                    ? 'bg-[#2A1F00] border border-[#F5C518]/40 text-[#F5C518]/70 hover:bg-[#F5C518]/20 hover:border-[#F5C518] hover:text-[#F5C518]'
+                                    : 'bg-[#252525] border border-[#3A3A3A] text-gray-500 hover:bg-[#3A3A3A] hover:text-white hover:border-gray-500'
+                              }
+                            `}
+                          >
+                            {seat.TENGHE.replace(/[A-Za-z]/, '')}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Lối đi giữa */}
+                    <div className="flex-shrink-0" style={{ width: '16px' }} />
+
+                    {/* Phải (cột 9-12) */}
+                    <div className="flex gap-[3px] flex-shrink-0">
+                      {rowSeats.slice(8, 12).map((seat) => {
+                        const status = getSeatStatus(seat);
+                        const isVip = status === 'vip-available';
+                        return (
+                          <button
+                            key={seat.MAGHE}
+                            onClick={() => handleSeatClick(seat.MAGHE)}
+                            disabled={status === 'booked'}
+                            title={seat.TENGHE}
+                            className={`
+                              w-[38px] h-[28px] rounded-t text-[9px] font-medium transition-all flex-shrink-0
+                              ${status === 'booked'
+                                ? 'bg-[#E50914]/80 text-white cursor-not-allowed'
+                                : status === 'selected'
+                                  ? 'bg-[#F5C518] text-[#121212] shadow-md shadow-yellow-500/40 scale-105'
+                                  : isVip
+                                    ? 'bg-[#2A1F00] border border-[#F5C518]/40 text-[#F5C518]/70 hover:bg-[#F5C518]/20 hover:border-[#F5C518] hover:text-[#F5C518]'
+                                    : 'bg-[#252525] border border-[#3A3A3A] text-gray-500 hover:bg-[#3A3A3A] hover:text-white hover:border-gray-500'
+                              }
+                            `}
+                          >
+                            {seat.TENGHE.replace(/[A-Za-z]/, '')}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Label hàng bên phải */}
+                    <span
+                      className="text-gray-500 text-[11px] font-medium text-center flex-shrink-0 select-none ml-[4px]"
+                      style={{ width: '20px' }}
+                    >
+                      {rowLabel}
+                    </span>
                   </div>
-                  <span className="w-4 md:w-6 text-gray-600 text-xs text-center flex-shrink-0">{rowLabel}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
