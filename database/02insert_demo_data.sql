@@ -357,3 +357,118 @@ END;
 /
 
 
+-- THEM SUAT CHIEU
+DECLARE
+    TYPE t_movie_list IS TABLE OF VARCHAR2(20) INDEX BY PLS_INTEGER;
+    v_movies t_movie_list;
+    v_total_movies NUMBER := 0;
+    
+    v_Ngay DATE;
+    v_Phim VARCHAR2(20);
+    v_GioBatDau TIMESTAMP;
+    v_GioKetThuc TIMESTAMP;
+    v_Counter NUMBER := 0;
+    v_conflict_count NUMBER;
+BEGIN
+    -- 1. Lấy tất cả mã phim
+    FOR m IN (SELECT MAPHIM FROM PHIM) LOOP
+        v_total_movies := v_total_movies + 1;
+        v_movies(v_total_movies) := m.MAPHIM;
+    END LOOP;
+
+    -- 2. Duyệt qua 10 ngày tới
+    FOR d IN 0..9 LOOP
+        v_Ngay := TO_DATE('2026-05-22', 'YYYY-MM-DD') + d;
+        
+        FOR r IN (SELECT MAPHONG FROM PHONG_CHIEU) LOOP
+            FOR s IN 1..4 LOOP
+                v_Phim := v_movies(MOD(v_Counter, v_total_movies) + 1);
+                
+                IF s = 1 THEN
+                    v_GioBatDau := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 09:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                    v_GioKetThuc := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 11:30:00', 'YYYY-MM-DD HH24:MI:SS');
+                ELSIF s = 2 THEN
+                    v_GioBatDau := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 13:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                    v_GioKetThuc := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 15:30:00', 'YYYY-MM-DD HH24:MI:SS');
+                ELSIF s = 3 THEN
+                    v_GioBatDau := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 17:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                    v_GioKetThuc := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 19:30:00', 'YYYY-MM-DD HH24:MI:SS');
+                ELSE
+                    v_GioBatDau := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 20:30:00', 'YYYY-MM-DD HH24:MI:SS');
+                    v_GioKetThuc := TO_TIMESTAMP(TO_CHAR(v_Ngay, 'YYYY-MM-DD') || ' 23:00:00', 'YYYY-MM-DD HH24:MI:SS');
+                END IF;
+                
+                -- KIỂM TRA CHỒNG LẤN (Dùng TRUNC để khớp với logic Trigger)
+                SELECT COUNT(*) INTO v_conflict_count
+                FROM SUAT_CHIEU
+                WHERE MAPHONG = r.MAPHONG
+                AND TRUNC(NGAYCHIEU) = TRUNC(v_Ngay)
+                AND (v_GioBatDau < GIOKETTHUC AND v_GioKetThuc > GIOBATDAU);
+                
+                -- CHỈ INSERT NẾU KHÔNG CÓ XUNG ĐỘT
+                IF v_conflict_count = 0 THEN
+                    BEGIN
+                        INSERT INTO SUAT_CHIEU (MASUAT, MAPHIM, MAPHONG, NGAYCHIEU, GIOBATDAU, GIOKETTHUC, TRANGTHAISUAT)
+                        VALUES ('SC' || LPAD(SEQ_SC.NEXTVAL, 5, '0'), v_Phim, r.MAPHONG, v_Ngay, v_GioBatDau, v_GioKetThuc, 'Showing');
+                    EXCEPTION WHEN OTHERS THEN
+                        -- Bỏ qua nếu có lỗi phát sinh bất ngờ
+                        DBMS_OUTPUT.PUT_LINE('Suất chiếu bị lỗi, bỏ qua: ' || SQLERRM);
+                    END;
+                END IF;
+                
+                v_Counter := v_Counter + 1;
+            END LOOP;
+        END LOOP;
+    END LOOP;
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Đã hoàn tất kiểm tra và chèn thêm suất chiếu.');
+END;
+/
+
+-- THEM GHE NGOI CHO MOI PHONG CHIEU
+DECLARE
+    v_TenGhe VARCHAR2(10);
+    v_LoaiGhe VARCHAR2(10);
+    v_TonTai NUMBER;
+    v_RowChar CHAR(1);
+    v_NumCols NUMBER := 12; -- 12 ghế mỗi hàng
+BEGIN
+    -- VÒNG LẶP ĐỘNG: Tự động quét TẤT CẢ các phòng chiếu đang có trong rạp
+    FOR r IN (SELECT MAPHONG FROM PHONG_CHIEU) LOOP
+        -- Lặp 10 hàng A->J
+        FOR row_ascii IN 65..74 LOOP
+            v_RowChar := CHR(row_ascii);
+            IF row_ascii BETWEEN 68 AND 72 THEN 
+                v_LoaiGhe := 'LG002'; -- VIP
+            ELSE 
+                v_LoaiGhe := 'LG001'; -- Thường
+            END IF;
+            
+            FOR col_num IN 1..v_NumCols LOOP
+                v_TenGhe := v_RowChar || col_num;
+                
+                -- SỬA Ở ĐÂY: Đổi TENGHE thành VITRI theo đúng schema của em
+                SELECT COUNT(*) INTO v_TonTai 
+                FROM GHE_NGOI 
+                WHERE MAPHONG = r.MAPHONG AND VITRI = v_TenGhe;
+                
+                -- Chỉ chèn nếu ghế chưa tồn tại
+                IF v_TonTai = 0 THEN
+                    -- SỬA Ở ĐÂY: Đổi TENGHE thành VITRI
+                    INSERT INTO GHE_NGOI (MAGHE, MAPHONG, MALOAIGHE, VITRI)
+                    VALUES ('G' || LPAD(SEQ_GHE.NEXTVAL, 5, '0'), r.MAPHONG, v_LoaiGhe, v_TenGhe);
+                END IF;
+            END LOOP;
+        END LOOP;
+        
+        -- Cập nhật tự động Sức chứa
+        UPDATE PHONG_CHIEU 
+        SET SUCCHUAGHE = (SELECT COUNT(*) FROM GHE_NGOI WHERE MAPHONG = r.MAPHONG)
+        WHERE MAPHONG = r.MAPHONG;
+        
+    END LOOP;
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('Đã bơm đầy ghế ngồi cho TẤT CẢ phòng chiếu thành công!');
+END;
+/
