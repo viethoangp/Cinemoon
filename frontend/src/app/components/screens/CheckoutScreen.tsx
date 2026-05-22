@@ -40,7 +40,7 @@ interface ApiSeat {
 
 export const CheckoutScreen = () => {
   const navigate = useNavigate();
-  const { selectedMovie, selectedSeats, selectedShowtime, selectedDate, selectedCinema, selectedSuatChieu } = useApp();
+  const { selectedMovie, selectedSeats, selectedShowtime, selectedDate, selectedCinema, selectedSuatChieu, addNotification } = useApp();
 
   // UI State
   const [paymentMethod, setPaymentMethod] = useState('momo');
@@ -77,6 +77,13 @@ export const CheckoutScreen = () => {
     if (seat.TENLOAI?.toUpperCase() === 'VIP') return 'LG002';
     return 'LG001';
   };
+
+  // Trigger notification when booking is confirmed
+  useEffect(() => {
+    if (isConfirmed && bookingId) {
+      addNotification(`✓ Đặt vé thành công! Mã vé: ${bookingId}`, 'success', 5000);
+    }
+  }, [isConfirmed, bookingId, addNotification]);
 
   useEffect(() => {
     const fetchSeatData = async () => {

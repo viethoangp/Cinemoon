@@ -7,6 +7,7 @@ import {SeatMapScreen} from './components/screens/SeatMapScreen';
 import { CheckoutScreen } from './components/screens/CheckoutScreen';
 import { ProfileScreen } from './components/screens/ProfileScreen';
 import { AdminScreen } from './components/screens/AdminScreen';
+import { PromotionsScreen } from './components/screens/PromotionsScreen';
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: '/seat', Component: SeatMapScreen },
       { path: '/checkout', Component: CheckoutScreen },
       { path: '/profile', Component: ProfileScreen },
+      { path: '/promotions', Component: PromotionsScreen },
     ],
   },
   {

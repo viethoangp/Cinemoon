@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router';
 import { Navbar } from './Navbar';
+import { NotificationComponent } from './NotificationComponent';
 
 export const AppLayout = () => {
   return (
@@ -12,6 +13,7 @@ export const AppLayout = () => {
       <main style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
         <Outlet />
       </main>
+      <NotificationComponent />
     </div>
   );
 };

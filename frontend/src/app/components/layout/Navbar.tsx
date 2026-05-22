@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { Search, Film, Bell, ChevronDown, Ticket } from 'lucide-react';
+import { Film, Bell, ChevronDown } from 'lucide-react';
 import { authAPI } from '../../../services/api';
+import { useApp } from '../../context/AppContext';
 
 const AVATAR_URL = "https://images.unsplash.com/photo-1764384700065-304c92b11e9c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=80";
 
 export const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchVal, setSearchVal] = useState('');
+  const { notifications, removeNotification } = useApp();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [userName, setUserName] = useState<string>('User');
   const [userEmail, setUserEmail] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export const Navbar = () => {
   const navLinks = [
     { label: 'Trang chủ', path: '/home' },
     { label: 'Lịch chiếu', path: '/showtime' },
-    { label: 'Khuyến mãi', path: '#' },
+    { label: 'Khuyến mãi', path: '/promotions' },
   ];
 
   return (
@@ -75,31 +77,71 @@ export const Navbar = () => {
       </div>
 
       {/* Search */}
-      <div className="flex items-center bg-[#1C1C1C] border border-[#2A2A2A] rounded-full px-4 py-2 gap-2 w-64 focus-within:border-[#E50914]/50 transition-colors">
-        <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
-        <input
-          type="text"
-          placeholder="Tìm kiếm phim..."
-          value={searchVal}
-          onChange={(e) => setSearchVal(e.target.value)}
-          className="bg-transparent text-sm text-gray-300 outline-none w-full placeholder-gray-600"
-        />
-      </div>
+      <div className="flex-1"></div>
 
       {/* Right section */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate('/checkout')}
-          className="flex items-center gap-2 bg-[#E50914] hover:bg-[#C40812] text-white text-sm px-4 py-2 rounded-lg transition-colors"
-        >
-          <Ticket className="w-4 h-4" />
-          Đặt vé
-        </button>
+        {/* Notifications Button */}
+        <div className="relative">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <Bell className="w-5 h-5 text-gray-400" />
+            {notifications.length > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#E50914] rounded-full animate-pulse"></span>
+            )}
+          </button>
 
-        <button className="relative p-2 hover:bg-white/5 rounded-lg transition-colors">
-          <Bell className="w-5 h-5 text-gray-400" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#E50914] rounded-full"></span>
-        </button>
+          {/* Notifications Dropdown */}
+          {showNotifications && (
+            <div className="absolute right-0 top-full mt-2 w-80 bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl shadow-2xl overflow-hidden z-50">
+              <div className="p-4 border-b border-[#2A2A2A]">
+                <p className="text-white font-semibold">Thông báo</p>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                {notifications.length > 0 ? (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      className={`p-4 border-b border-[#2A2A2A] last:border-b-0 flex items-start justify-between gap-3 ${
+                        notif.type === 'success'
+                          ? 'bg-green-500/10'
+                          : notif.type === 'error'
+                          ? 'bg-red-500/10'
+                          : 'bg-blue-500/10'
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <p
+                          className={`text-sm font-medium ${
+                            notif.type === 'success'
+                              ? 'text-green-400'
+                              : notif.type === 'error'
+                              ? 'text-red-400'
+                              : 'text-blue-400'
+                          }`}
+                        >
+                          {notif.message}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeNotification(notif.id)}
+                        className="text-gray-500 hover:text-white transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-gray-500 text-sm">
+                    Không có thông báo
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* User dropdown */}
         <div className="relative">

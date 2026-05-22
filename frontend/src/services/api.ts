@@ -443,7 +443,7 @@ interface Voucher {
   makhuyenmai: string;
   tenchuongtrinh: string;
   giatrigiam: number;
-  dieukienapdung: string;
+  dieukienapdung: number;
   ngaybatdau: string;
   ngayketthuc: string;
   soLanSuDung?: number;

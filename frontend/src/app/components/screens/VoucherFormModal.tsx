@@ -3,7 +3,6 @@ import { X, Check, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
 import type { Voucher } from '../../../services/api';
 
 interface VoucherFormModalProps {
@@ -19,7 +18,7 @@ export const VoucherFormModal: React.FC<VoucherFormModalProps> = ({
 }) => {
   const [tenchuongtrinh, setTenchuongtrinh] = useState(voucher?.tenchuongtrinh || '');
   const [giatrigiam, setGiatrigiam] = useState(voucher?.giatrigiam || '');
-  const [dieukienapdung, setDieukienapdung] = useState(voucher?.dieukienapdung || '');
+  const [muchoadon, setMuchoadon] = useState(voucher?.dieukienapdung || '');
   const [ngaybatdau, setNgaybatdau] = useState(voucher?.ngaybatdau || '');
   const [ngayketthuc, setNgayketthuc] = useState(voucher?.ngayketthuc || '');
   const [loading, setLoading] = useState(false);
@@ -28,7 +27,7 @@ export const VoucherFormModal: React.FC<VoucherFormModalProps> = ({
   const handleSubmit = async () => {
     setError(null);
 
-    if (!tenchuongtrinh || !giatrigiam || !dieukienapdung || !ngaybatdau || !ngayketthuc) {
+    if (!tenchuongtrinh || !giatrigiam || !muchoadon || !ngaybatdau || !ngayketthuc) {
       setError('Vui lòng điền tất cả các trường bắt buộc.');
       return;
     }
@@ -47,12 +46,18 @@ export const VoucherFormModal: React.FC<VoucherFormModalProps> = ({
       return;
     }
 
+    const minOrderValue = parseFloat(muchoadon.toString());
+    if (isNaN(minOrderValue) || minOrderValue <= 0) {
+      setError('Mức hóa đơn tối thiểu phải là số dương.');
+      return;
+    }
+
     try {
       setLoading(true);
       onSave({
         tenchuongtrinh,
         giatrigiam: discountValue,
-        dieukienapdung,
+        dieukienapdung: minOrderValue,
         ngaybatdau,
         ngayketthuc,
       });
@@ -112,15 +117,18 @@ export const VoucherFormModal: React.FC<VoucherFormModalProps> = ({
             />
           </div>
 
-          {/* Điều Kiện Áp Dụng */}
+          {/* Mức Hóa Đơn Tối Thiểu */}
           <div>
-            <Label className="text-gray-300 text-sm mb-2 block">Điều Kiện Áp Dụng *</Label>
-            <Textarea
-              placeholder="Ví dụ: Mua vé từ 2 vé trở lên"
-              value={dieukienapdung}
-              onChange={(e) => setDieukienapdung(e.target.value)}
-              className="bg-[#252525] border-[#333] text-white placeholder-gray-600 min-h-20"
+            <Label className="text-gray-300 text-sm mb-2 block">Mức Hóa Đơn Tối Thiểu (VND) *</Label>
+            <Input
+              type="number"
+              placeholder="Ví dụ: 100000"
+              value={muchoadon}
+              onChange={(e) => setMuchoadon(e.target.value)}
+              className="bg-[#252525] border-[#333] text-white placeholder-gray-600"
+              min="0"
             />
+            <p className="text-gray-500 text-xs mt-2">Voucher chỉ áp dụng khi hóa đơn từ mức này trở lên</p>
           </div>
 
           {/* Ngày Bắt Đầu */}

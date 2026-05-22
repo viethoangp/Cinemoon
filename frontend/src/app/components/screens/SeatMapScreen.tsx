@@ -33,6 +33,10 @@ export const SeatMapScreen = () => {
   const [isHolding, setIsHolding] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [seatTypePrices, setSeatTypePrices] = useState<Record<string, { base: number; withFee: number }>>({
+    'LG001': { base: 85000, withFee: 89250 }, // Standard - default values
+    'LG002': { base: 110000, withFee: 115500 } // VIP - default values
+  });
   const [priceData, setPriceData] = useState({
     ticketTotal: 0,
     serviceFee: 0,
@@ -45,6 +49,43 @@ export const SeatMapScreen = () => {
     const t = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     return () => clearInterval(t);
   }, [timeLeft]);
+
+  // Fetch dynamic prices for seat types when date/time changes
+  useEffect(() => {
+    const fetchDynamicPrices = async () => {
+      if (!selectedDate || !selectedShowtime) return;
+
+      try {
+        const seatTypeIds = ['LG001', 'LG002']; // Standard, VIP (excluding LG003 Sweetbox)
+        const priceMap: Record<string, { base: number; withFee: number }> = {};
+
+        for (const seatTypeId of seatTypeIds) {
+          try {
+            const priceResponse = await bookingAPI.calculatePrice({
+              maloaighe: seatTypeId,
+              maloaikhach: 'LK001',
+              ngaychieu: selectedDate,
+              giobatdau: selectedShowtime,
+            });
+            const basePrice = Number(priceResponse.price || 0);
+            const withFee = basePrice + Math.round(basePrice * 0.05);
+            priceMap[seatTypeId] = { base: basePrice, withFee };
+          } catch (error) {
+            console.error(`Lỗi tính giá cho ${seatTypeId}:`, error);
+          }
+        }
+
+        // Only update if we have valid prices
+        if (Object.keys(priceMap).length > 0) {
+          setSeatTypePrices(prev => ({ ...prev, ...priceMap }));
+        }
+      } catch (error) {
+        console.error('Lỗi fetch dynamic prices:', error);
+      }
+    };
+
+    fetchDynamicPrices();
+  }, [selectedDate, selectedShowtime]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -99,7 +140,7 @@ export const SeatMapScreen = () => {
             TRANGTHAI: s.TRANGTHAI || s.trangthai || s.status || 'Available',
             TENLOAI: s.TENLOAI || s.tenloai || s.type || (['D', 'E', 'F'].includes(tenGhe.charAt(0)) ? 'VIP' : 'Standard')
           };
-        }).filter(s => s.TENGHE !== '');
+        }).filter(s => s.TENGHE !== '' && s.MALOAIGHE !== 'LG003');
 
         setSeats(safeSeats);
       } catch (error) {
@@ -341,8 +382,15 @@ export const SeatMapScreen = () => {
 
           <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 mt-4 pb-4">
             {[
-              { color: 'bg-[#252525] border border-[#3A3A3A]', label: 'Thường (85K)' },
-              { color: 'bg-[#2A1F00] border border-[#F5C518]/40', label: 'VIP (110K)', textColor: 'text-[#F5C518]' },
+              { 
+                color: 'bg-[#252525] border border-[#3A3A3A]', 
+                label: `Thường (${Math.round(seatTypePrices['LG001'].base / 1000)}K + ${Math.round(seatTypePrices['LG001'].base * 0.05 / 1000)}K phí = ${Math.round(seatTypePrices['LG001'].withFee / 1000)}K)` 
+              },
+              { 
+                color: 'bg-[#2A1F00] border border-[#F5C518]/40', 
+                label: `VIP (${Math.round(seatTypePrices['LG002'].base / 1000)}K + ${Math.round(seatTypePrices['LG002'].base * 0.05 / 1000)}K phí = ${Math.round(seatTypePrices['LG002'].withFee / 1000)}K)`, 
+                textColor: 'text-[#F5C518]' 
+              },
               { color: 'bg-[#F5C518]', label: 'Đang chọn', textColor: 'text-gray-300' },
               { color: 'bg-[#E50914]/80', label: 'Đã bán', textColor: 'text-gray-300' },
             ].map(({ color, label, textColor }) => (

@@ -19,6 +19,13 @@ export interface Movie {
   cast: string[];
 }
 
+export interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  message: string;
+  duration?: number;
+}
+
 interface AppContextType {
   // Movie selection
   selectedMovie: Movie | null;
@@ -66,7 +73,10 @@ interface AppContextType {
   logout: () => void;
   isAuthenticated: boolean;
 
-  
+  // Notification state
+  notifications: Notification[];
+  addNotification: (message: string, type: 'success' | 'error' | 'info' | 'warning', duration?: number) => void;
+  removeNotification: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -219,6 +229,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  // Notification states
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
   // Logic chọn/bỏ chọn ghế
   const toggleSeat = (seatId: string) => {
     setSelectedSeats(prev => 
@@ -332,6 +345,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
+  const addNotification = (message: string, type: 'success' | 'error' | 'info' | 'warning', duration = 3000) => {
+    const id = Date.now().toString();
+    const newNotification: Notification = { id, message, type, duration };
+    setNotifications(prev => [...prev, newNotification]);
+
+    // Auto remove after duration
+    if (duration > 0) {
+      setTimeout(() => {
+        removeNotification(id);
+      }, duration);
+    }
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   return (
     <AppContext.Provider value={{
       selectedMovie, setSelectedMovie,
@@ -361,6 +391,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       login,
       logout: handleLogout,
       isAuthenticated,
+      notifications,
+      addNotification,
+      removeNotification,
     }}>
       {children}
     </AppContext.Provider>
