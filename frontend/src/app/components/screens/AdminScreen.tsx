@@ -573,36 +573,73 @@ export const AdminScreen = () => {
                     </div>
                   </div>
 
-                  {/* Right: Top 5 Movies Bar Chart */}
+                  {/* Right: Top 5 Movies Vertical Bar Chart */}
                   <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-6">
-                    <h3 className="text-white font-semibold mb-6">Top 5 Phim theo doanh thu</h3>
-                    <div className="space-y-4">
-                      {dashboardData.topMovies.map((movie, idx) => {
-                        const maxRevenue = Math.max(...dashboardData.topMovies.map(m => m.doanhthu), 1);
-                        const percentage = (movie.doanhthu / maxRevenue) * 100;
-                        return (
-                          <div key={movie.maphim} className="flex items-center gap-3">
-                            <span className={`w-6 text-center font-bold text-sm flex-shrink-0 ${
-                              idx === 0 ? 'text-[#F5C518]' : idx === 1 ? 'text-[#E50914]' : 'text-gray-600'
-                            }`}>
-                              #{idx + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm font-medium truncate">{movie.tenphim}</p>
-                              <p className="text-gray-500 text-xs">{movie.tongVe.toLocaleString('vi-VN')} vé</p>
-                            </div>
-                            <div className="flex-shrink-0">
-                              <p className="text-[#F5C518] font-semibold text-sm">{formatCurrencyVND(movie.doanhthu)}</p>
-                            </div>
-                            <div className="w-20 bg-[#252525] rounded-full h-2 flex-shrink-0">
-                              <div
-                                className="bg-gradient-to-r from-[#E50914] to-[#F5C518] h-full rounded-full transition-all"
-                                style={{ width: `${percentage}%` }}
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="text-white font-semibold">Top 5 Phim theo doanh thu</h3>
+                        <p className="text-gray-500 text-xs mt-0.5">Đơn vị: triệu đồng</p>
+                      </div>
+                    </div>
+                    <div style={{ height: 280 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={dashboardData.topMovies.map((m) => ({
+                            name: m.tenphim.length > 12 ? m.tenphim.slice(0, 12) + '…' : m.tenphim,
+                            fullName: m.tenphim,
+                            revenue: Math.round(m.doanhthu / 1_000_000),
+                            tickets: m.tongVe,
+                          }))}
+                          margin={{ top: 8, right: 8, left: 0, bottom: 40 }}
+                          barSize={36}
+                        >
+                          <defs>
+                            <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#F5C518" stopOpacity={1} />
+                              <stop offset="100%" stopColor="#E50914" stopOpacity={0.9} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" horizontal={true} vertical={false} />
+                          <XAxis
+                            dataKey="name"
+                            tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                            axisLine={false}
+                            tickLine={false}
+                            interval={0}
+                            angle={-20}
+                            textAnchor="end"
+                            dy={8}
+                          />
+                          <YAxis
+                            tick={{ fill: '#6B7280', fontSize: 11 }}
+                            axisLine={false}
+                            tickLine={false}
+                            tickFormatter={(v) => `${v}tr`}
+                          />
+                          <Tooltip
+                            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                            content={({ payload }) => {
+                              if (!payload?.length) return null;
+                              const d = payload[0].payload;
+                              return (
+                                <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 10, padding: '10px 14px', fontSize: 12 }}>
+                                  <p style={{ color: '#9CA3AF', marginBottom: 6 }}>{d.fullName}</p>
+                                  <p style={{ color: '#F5C518', fontWeight: 600 }}>{d.revenue} triệu đồng</p>
+                                  <p style={{ color: '#6B7280', marginTop: 2 }}>{d.tickets?.toLocaleString('vi-VN')} vé</p>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Bar dataKey="revenue" fill="url(#barGradient)" radius={[6, 6, 0, 0]}>
+                            {dashboardData.topMovies.map((_, idx) => (
+                              <Cell
+                                key={idx}
+                                fill={idx === 0 ? 'url(#barGradient)' : idx === 1 ? '#E50914CC' : '#E5091466'}
                               />
-                            </div>
-                          </div>
-                        );
-                      })}
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
                 </div>

@@ -196,6 +196,9 @@ export const catalogAPI = {
   getPromotions: async (): Promise<any[]> => {
     return fetchAPI<any[]>('/catalog/khuyen-mai');
   },
+  getBookedSeats: async (masuat: string): Promise<any[]> => {
+    return fetchAPI<any[]>(`/catalog/ghe-da-dat?masuat=${masuat}`);
+  },
 
   /**
    * Get all cinemas

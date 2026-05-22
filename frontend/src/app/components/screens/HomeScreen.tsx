@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Star, Clock, Play, X, ChevronRight, TrendingUp, Flame, Award, Calendar } from 'lucide-react';
+import { Star, Clock, Play, X, ChevronRight, TrendingUp, Flame } from 'lucide-react';
 import { MOVIES, Movie, useApp } from '../../context/AppContext';
 import { SkeletonCard } from '../SkeletonCard';
 
@@ -256,32 +256,10 @@ export const HomeScreen = () => {
         {/* Filter tabs */}
         <div className="flex items-center gap-6 mb-8">
           <div className="flex gap-2">
-            {[
-              { label: 'Đang chiếu', icon: <TrendingUp className="w-4 h-4" />, active: true },
-              { label: 'Sắp chiếu', icon: <Calendar className="w-4 h-4" />, active: false },
-              { label: 'Phim hot', icon: <Flame className="w-4 h-4" />, active: false },
-              { label: 'Giải thưởng', icon: <Award className="w-4 h-4" />, active: false },
-            ].map(tab => (
-              <button
-                key={tab.label}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all ${
-                  tab.active
-                    ? 'bg-[#E50914] text-white'
-                    : 'bg-[#1C1C1C] text-gray-400 hover:text-white hover:bg-[#242424]'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto flex items-center gap-2 text-gray-500 text-sm">
-            <span>Sắp xếp:</span>
-            <select className="bg-[#1C1C1C] border border-[#2A2A2A] text-gray-300 text-sm rounded-lg px-3 py-1.5 outline-none">
-              <option>Phổ biến nhất</option>
-              <option>Điểm cao nhất</option>
-              <option>Mới nhất</option>
-            </select>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all bg-[#E50914] text-white">
+              <TrendingUp className="w-4 h-4" />
+              Đang chiếu
+            </button>
           </div>
         </div>
 
