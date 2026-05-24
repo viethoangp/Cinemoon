@@ -27,6 +27,8 @@ const formatCurrencyVND = (amount: number) => {
   return amount.toLocaleString('vi-VN');
 };
 
+const formatMillionCurrency = (amount: number) => `${(amount / 1_000_000).toFixed(1)} triệu`;
+
 const REVENUE_DATA = [
   { month: 'Th.11', revenue: 1.2, tickets: 1420 },
   { month: 'Th.12', revenue: 1.8, tickets: 2100 },
@@ -531,7 +533,7 @@ export const AdminScreen = () => {
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h3 className="text-white font-semibold">Biến động Tổng Doanh Thu 12 Tháng</h3>
-                        <p className="text-gray-500 text-xs mt-0.5">Đơn vị: tỷ đồng</p>
+                        <p className="text-gray-500 text-xs mt-0.5">Đơn vị: tỷ đồng VNĐ</p>
                       </div>
                     </div>
                     <div style={{ height: 280 }}>
@@ -578,7 +580,7 @@ export const AdminScreen = () => {
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h3 className="text-white font-semibold">Top 5 Phim theo doanh thu</h3>
-                        <p className="text-gray-500 text-xs mt-0.5">Đơn vị: triệu đồng</p>
+                        <p className="text-gray-500 text-xs mt-0.5">Đơn vị: triệu đồng VNĐ</p>
                       </div>
                     </div>
                     <div style={{ height: 280 }}>
@@ -587,7 +589,7 @@ export const AdminScreen = () => {
                           data={dashboardData.topMovies.map((m) => ({
                             name: m.tenphim.length > 12 ? m.tenphim.slice(0, 12) + '…' : m.tenphim,
                             fullName: m.tenphim,
-                            revenue: Math.round(m.doanhthu / 1_000_000),
+                            revenue: m.doanhthu,
                             tickets: m.tongVe,
                           }))}
                           margin={{ top: 8, right: 8, left: 0, bottom: 40 }}
@@ -614,7 +616,7 @@ export const AdminScreen = () => {
                             tick={{ fill: '#6B7280', fontSize: 11 }}
                             axisLine={false}
                             tickLine={false}
-                            tickFormatter={(v) => `${v}tr`}
+                            tickFormatter={(v) => formatMillionCurrency(v as number)}
                           />
                           <Tooltip
                             cursor={{ fill: 'rgba(255,255,255,0.04)' }}
@@ -624,7 +626,7 @@ export const AdminScreen = () => {
                               return (
                                 <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 10, padding: '10px 14px', fontSize: 12 }}>
                                   <p style={{ color: '#9CA3AF', marginBottom: 6 }}>{d.fullName}</p>
-                                  <p style={{ color: '#F5C518', fontWeight: 600 }}>{d.revenue} triệu đồng</p>
+                                  <p style={{ color: '#F5C518', fontWeight: 600 }}>{formatMillionCurrency(d.revenue)} đồng</p>
                                   <p style={{ color: '#6B7280', marginTop: 2 }}>{d.tickets?.toLocaleString('vi-VN')} vé</p>
                                 </div>
                               );

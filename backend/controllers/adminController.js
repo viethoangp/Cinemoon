@@ -730,19 +730,29 @@ export const getDashboardStats = async (req, res) => {
         FETCH FIRST 12 ROWS ONLY
       `,
       topMovies: `
-        SELECT 
+        -- Allocate each transaction total across its tickets to avoid double-counting
+        WITH ticket_alloc AS (
+          SELECT
+            v.MAGD,
+            sc.MAPHIM,
+            gd.TONGTIEN,
+            COUNT(*) OVER (PARTITION BY v.MAGD) AS TICKET_COUNT
+          FROM VE v
+          JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT
+          JOIN GIAO_DICH gd ON v.MAGD = gd.MAGD
+          WHERE gd.TRANGTHAIGD = 'Paid'
+            -- Optional time filter, e.g.: AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+        )
+        SELECT
           p.MAPHIM,
           p.TENPHIM,
           p.POSTER,
-          COALESCE(SUM(gd.TONGTIEN), 0) as DOANHTHU,
-          COALESCE(COUNT(v.MAVE), 0) as TONG_VE
-        FROM PHIM p
-        LEFT JOIN SUAT_CHIEU sc ON p.MAPHIM = sc.MAPHIM
-        LEFT JOIN VE v ON sc.MASUAT = v.MASUAT
-        LEFT JOIN GIAO_DICH gd ON v.MAGD = gd.MAGD
-        WHERE gd.TRANGTHAIGD IS NULL OR gd.TRANGTHAIGD = 'Paid'
+          ROUND(SUM(ta.TONGTIEN / ta.TICKET_COUNT), 2) AS DOANHTHU,
+          COUNT(*) AS TONG_VE
+        FROM ticket_alloc ta
+        JOIN PHIM p ON ta.MAPHIM = p.MAPHIM
         GROUP BY p.MAPHIM, p.TENPHIM, p.POSTER
-        ORDER BY DOANHTHU DESC
+        ORDER BY DOANHTHU DESC NULLS LAST
         FETCH FIRST 5 ROWS ONLY
       `,
       topCustomers: `

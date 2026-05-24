@@ -12,8 +12,6 @@ interface ApiSeat {
   TENLOAI: string;
 }
 
-const MOCK_BOOKED_SEATS = new Set(['A2', 'A3', 'C7', 'D3', 'E5', 'F8']);
-
 export const SeatMapScreen = () => {
   const navigate = useNavigate();
   const { 
@@ -33,6 +31,7 @@ export const SeatMapScreen = () => {
   const [isHolding, setIsHolding] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [bookedSeatIds, setBookedSeatIds] = useState<Set<string>>(new Set());
   const [seatTypePrices, setSeatTypePrices] = useState<Record<string, { base: number; withFee: number }>>({
     'LG001': { base: 85000, withFee: 89250 }, // Standard - default values
     'LG002': { base: 110000, withFee: 115500 } // VIP - default values
@@ -100,58 +99,84 @@ export const SeatMapScreen = () => {
   };
 
 
-// 1. ÁO GIÁP BẢO VỆ & PHỤC DỰNG GHẾ TỪ ORACLE
-  useEffect(() => {
-    const fetchSeats = async () => {
-      try {
-        setLoading(true);
-        const maphong = selectedSuatChieu?.MAPHONG || 'PC001';
-        let rawData = await catalogAPI.getSeats(maphong);
+  // 1. ÁO GIÁP BẢO VỆ & PHỤC DỰNG GHẾ TỪ ORACLE
+  const fetchSeats = useCallback(async () => {
+    try {
+      setLoading(true);
+      const maphong = selectedSuatChieu?.MAPHONG || 'PC001';
+      const masuat = selectedSuatChieu?.MASUAT;
 
-        // Bóc tách data nếu API bọc trong object
-        if (rawData && !Array.isArray(rawData) && (rawData as any).data) {
-          rawData = (rawData as any).data;
-        }
-        if (!Array.isArray(rawData)) rawData = [];
+      const [seatData, bookedData] = await Promise.all([
+        catalogAPI.getSeats(maphong),
+        masuat ? catalogAPI.getBookedSeats(masuat) : Promise.resolve([]),
+      ]);
 
-        // CHUẨN HÓA VÀ PHỤC DỰNG DỮ LIỆU
-        const safeSeats: ApiSeat[] = rawData.map((s: any, index: number) => {
-          const maGhe = s.MAGHE || s.maghe || s.id || `MOCK_${index}`;
-          let tenGhe = s.TENGHE || s.tenghe || s.VITRI || s.vitri || s.name || '';
+      const rawData = Array.isArray(seatData) ? seatData : [];
+      const bookedIds = new Set(
+        (Array.isArray(bookedData) ? bookedData : [])
+          .map((seat: any) => seat.MAGHE || seat.maghe || seat.id)
+          .filter(Boolean)
+      );
 
-          // THUẬT TOÁN BIẾN GHE001 -> A1
-          if (!tenGhe && maGhe.toUpperCase().includes('GHE')) {
-            const numMatch = maGhe.match(/\d+/);
-            if (numMatch) {
-              const num = parseInt(numMatch[0], 10);
-              const rowIndex = Math.floor((num - 1) / 12); // Dòng A, B, C... (chia 12 ghế/dòng)
-              const colIndex = ((num - 1) % 12) + 1;       // Cột 1, 2, 3...
-              tenGhe = `${String.fromCharCode(65 + rowIndex)}${colIndex}`;
-            }
-          } else if (!tenGhe) {
-            // Nếu format mã ghế khác, cứ đánh bừa A1, A2 để không bị lỗi màn hình
-            tenGhe = `A${index + 1}`; 
+      // CHUẨN HÓA VÀ PHỤC DỰNG DỮ LIỆU
+      const safeSeats: ApiSeat[] = rawData.map((s: any, index: number) => {
+        const maGhe = s.MAGHE || s.maghe || s.id || `MOCK_${index}`;
+        let tenGhe = s.TENGHE || s.tenghe || s.VITRI || s.vitri || s.name || '';
+
+        // THUẬT TOÁN BIẾN GHE001 -> A1
+        if (!tenGhe && maGhe.toUpperCase().includes('GHE')) {
+          const numMatch = maGhe.match(/\d+/);
+          if (numMatch) {
+            const num = parseInt(numMatch[0], 10);
+            const rowIndex = Math.floor((num - 1) / 12); // Dòng A, B, C... (chia 12 ghế/dòng)
+            const colIndex = ((num - 1) % 12) + 1;       // Cột 1, 2, 3...
+            tenGhe = `${String.fromCharCode(65 + rowIndex)}${colIndex}`;
           }
+        } else if (!tenGhe) {
+          // Nếu format mã ghế khác, cứ đánh bừa A1, A2 để không bị lỗi màn hình
+          tenGhe = `A${index + 1}`;
+        }
 
-          return {
-            MAGHE: maGhe,
-            TENGHE: tenGhe,
-            MALOAIGHE: s.MALOAIGHE || s.maloaighe || 'LG001',
-            TRANGTHAI: s.TRANGTHAI || s.trangthai || s.status || 'Available',
-            TENLOAI: s.TENLOAI || s.tenloai || s.type || (['D', 'E', 'F'].includes(tenGhe.charAt(0)) ? 'VIP' : 'Standard')
-          };
-        }).filter(s => s.TENGHE !== '' && s.MALOAIGHE !== 'LG003');
+        return {
+          MAGHE: maGhe,
+          TENGHE: tenGhe,
+          MALOAIGHE: s.MALOAIGHE || s.maloaighe || 'LG001',
+          TRANGTHAI: bookedIds.has(maGhe) ? 'Booked' : (s.TRANGTHAI || s.trangthai || s.status || 'Available'),
+          TENLOAI: s.TENLOAI || s.tenloai || s.type || (['D', 'E', 'F'].includes(tenGhe.charAt(0)) ? 'VIP' : 'Standard')
+        };
+      }).filter(s => s.TENGHE !== '' && s.MALOAIGHE !== 'LG003');
 
-        setSeats(safeSeats);
-      } catch (error) {
-        console.error('Lỗi khi lấy sơ đồ ghế:', error);
-      } finally {
-        setLoading(false);
+      setSeats(safeSeats);
+      setBookedSeatIds(bookedIds);
+    } catch (error) {
+      console.error('Lỗi khi lấy sơ đồ ghế:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedSuatChieu?.MAPHONG, selectedSuatChieu?.MASUAT]);
+
+  useEffect(() => {
+    fetchSeats();
+
+    const intervalId = window.setInterval(() => {
+      fetchSeats();
+    }, 5000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchSeats();
       }
     };
 
-    fetchSeats();
-  }, [selectedSuatChieu, refreshTrigger]);
+    window.addEventListener('focus', fetchSeats);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', fetchSeats);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchSeats, refreshTrigger]);
 
   // 2. NHÓM DÒNG
   const groupedSeats = seats.reduce((acc, seat) => {
@@ -165,7 +190,7 @@ export const SeatMapScreen = () => {
 
   // 3. KIỂM TRA TRẠNG THÁI MÀU GHẾ
   const getSeatStatus = (seat: ApiSeat): 'available' | 'booked' | 'selected' | 'vip-available' => {
-    if (MOCK_BOOKED_SEATS.has(seat.TENGHE) || seat.TRANGTHAI !== 'Available') return 'booked';
+    if (bookedSeatIds.has(seat.MAGHE) || seat.TRANGTHAI !== 'Available') return 'booked';
     if (selectedSeats.includes(seat.MAGHE)) return 'selected';
     if (seat.TENLOAI === 'VIP' || seat.MALOAIGHE === 'LG002') return 'vip-available';
     return 'available';
