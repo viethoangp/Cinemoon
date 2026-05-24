@@ -464,11 +464,11 @@ export const SeatMapScreen = () => {
             {[
               { 
                 color: 'bg-[#252525] border border-[#3A3A3A]', 
-                label: `Thường (${Math.round(seatTypePrices['LG001'].base / 1000)}K + ${Math.round(seatTypePrices['LG001'].base * 0.05 / 1000)}K phí = ${Math.round(seatTypePrices['LG001'].withFee / 1000)}K)` 
+                label: `Thường (${Math.round(seatTypePrices['LG001'].base / 1000)}K + 5% phí)` 
               },
               { 
                 color: 'bg-[#2A1F00] border border-[#F5C518]/40', 
-                label: `VIP (${Math.round(seatTypePrices['LG002'].base / 1000)}K + ${Math.round(seatTypePrices['LG002'].base * 0.05 / 1000)}K phí = ${Math.round(seatTypePrices['LG002'].withFee / 1000)}K)`, 
+                label: `VIP (${Math.round(seatTypePrices['LG002'].base / 1000)}K + 5% phí)`, 
                 textColor: 'text-[#F5C518]' 
               },
               { color: 'bg-[#F5C518]', label: 'Đang chọn', textColor: 'text-gray-300' },

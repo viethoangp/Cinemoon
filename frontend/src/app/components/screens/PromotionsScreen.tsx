@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Loader } from 'lucide-react';
 import { catalogAPI } from '../../../services/api';
+import { useApp } from '../../context/AppContext';
 
 interface Promotion {
   MAKHUYENMAI?: string;
@@ -12,6 +13,7 @@ interface Promotion {
 }
 
 export const PromotionsScreen = () => {
+  const { addNotification } = useApp();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +103,24 @@ export const PromotionsScreen = () => {
 
               {/* Condition */}
               <p className="text-gray-400 text-sm mb-4">{formatCondition(promo.DIEUKIENAPDUNG)}</p>
+
+              {/* Voucher Code Section */}
+              <div className="bg-[#252525] rounded-lg px-4 py-3 mb-4 border border-[#333]">
+                <p className="text-gray-500 text-xs mb-1">Mã khuyến mãi</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[#F5C518] font-mono font-bold tracking-widest text-sm">{promo.MAKHUYENMAI || 'N/A'}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(promo.MAKHUYENMAI || '');
+                      addNotification?.('✓ Đã sao chép mã khuyến mãi!', 'success', 2000);
+                    }}
+                    className="text-gray-400 hover:text-[#F5C518] transition-colors text-xs px-2 py-1 rounded hover:bg-[#333]"
+                    title="Sao chép mã"
+                  >
+                    📋
+                  </button>
+                </div>
+              </div>
 
               {/* Valid until */}
               <div className="pt-4 border-t border-[#2A2A2A] flex items-center justify-between">

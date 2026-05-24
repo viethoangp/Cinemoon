@@ -33,5 +33,5 @@ router.get('/khuyen-mai', catalogController.getKhuyenMai);
 
 // THAM_SO
 router.get('/tham-so', catalogController.getThamSo);
-
+router.get('/ghe-da-dat', catalogController.getBookedSeats);
 export default router;

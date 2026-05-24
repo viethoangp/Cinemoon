@@ -132,7 +132,7 @@ export async function checkout(req, res) {
       'authorization': req.headers['authorization'] ? '✓ Present' : '✗ Missing',
     });
     
-    const { masuat, seatIds, makhuyenmai, paymentMethod, totalAmount } = req.body;
+    const { masuat, seatIds, makhuyenmai, paymentMethod, totalAmount, ticketTotal, voucherDiscount } = req.body;
     const matk = req.user?.MATK;
 
     console.log('[checkout] Extracted from body:', {
@@ -175,28 +175,39 @@ export async function checkout(req, res) {
 
     // Apply discount if voucher provided
     let discount = 0;
+    let appliedVoucher = null;
     if (makhuyenmai) {
-      console.log('[checkout] Validating voucher:', makhuyenmai);
-      const voucherResult = await validateAndApplyVoucher(
-        makhuyenmai,
-        totalAmount
-      );
-      if (voucherResult.valid) {
-        discount = voucherResult.discount;
-        console.log('[checkout] Voucher applied - discount:', discount);
+      console.log('[checkout] Validating voucher against ticketTotal:', makhuyenmai, ticketTotal);
+      // Validate against ticketTotal (amount before service fee and discount)
+      const baseAmountToValidate = Number(ticketTotal || 0);
+      const voucherResult = await validateAndApplyVoucher(makhuyenmai, baseAmountToValidate);
+      if (!voucherResult.valid) {
+        console.warn('[checkout] Voucher invalid at checkout:', voucherResult.message);
+        return res.status(400).json(buildResponse(false, voucherResult.message, voucherResult));
+      }
+
+      discount = voucherResult.discount || 0;
+      appliedVoucher = makhuyenmai;
+
+      // Recompute expected grand total (ticketTotal + serviceFee - discount)
+      const expectedServiceFee = Math.round(baseAmountToValidate * 0.05);
+      const expectedGrand = baseAmountToValidate + expectedServiceFee - discount;
+
+      if (Number(totalAmount) !== expectedGrand) {
+        console.warn('[checkout] Mismatch between provided totalAmount and expected grand total', { provided: totalAmount, expected: expectedGrand });
+        return res.status(400).json(buildResponse(false, 'Tổng thanh toán không khớp sau khi áp mã khuyến mãi. Vui lòng làm mới trang và thử lại.'));
       }
     }
 
-    // Create transaction
-    console.log('[checkout] Calling createTransaction with data:', {
-      masuat, matk, seatIds, discount, paymentMethod, totalAmount
-    });
-    
+    // Create transaction (use provided totalAmount as final amount)
+    console.log('[checkout] Calling createTransaction with data:', { masuat, matk, seatIds, discount, paymentMethod, totalAmount, appliedVoucher });
+
     const result = await createTransaction({
       masuat,
       matk,
       seatIds,
       discount,
+      makhuyenmai: appliedVoucher,
       paymentMethod,
       totalAmount,
     });

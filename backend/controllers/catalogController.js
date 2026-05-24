@@ -282,3 +282,36 @@ export const getThamSo = async (req, res) => {
     res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
   }
 };
+export const getBookedSeats = async (req, res) => {
+  try {
+    const { masuat } = req.query;
+    if (!masuat) {
+      return res.status(400).json({ success: false, message: 'Thiếu tham số masuat.' });
+    }
+
+    // Lấy ghế đã bán (có vé) hoặc đang được giữ (trong DAT_CHO chưa hết hạn)
+    const query = `
+      SELECT DISTINCT gn.MAGHE, gn.VITRI
+      FROM GHE_NGOI gn
+      WHERE gn.MAGHE IN (
+        -- Ghế đã có vé (đã thanh toán)
+        SELECT v.MAGHE FROM VE v WHERE v.MASUAT = :masuat AND v.TRANGTHAIVE = 'Issued'
+        UNION
+        -- Ghế đang được giữ (chưa hết hạn giữ chỗ)
+        SELECT dc.MAGHE FROM DAT_CHO dc 
+        WHERE dc.MASUAT = :masuat 
+          AND dc.TRANGTHAICHO = 'Held' 
+          AND dc.GIUDEN > CURRENT_TIMESTAMP
+      )
+    `;
+    const data = await executeQuery(query, [masuat, masuat]);
+    res.status(200).json({
+      success: true,
+      data,
+      message: 'Lấy danh sách ghế đã đặt thành công.'
+    });
+  } catch (error) {
+    console.error('Lỗi getBookedSeats:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ.' });
+  }
+};

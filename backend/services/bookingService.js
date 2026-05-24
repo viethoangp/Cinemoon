@@ -63,7 +63,7 @@ export async function calculatePrice(maloaighe, maloaikhach, ngaychieu, giobatda
  * Validate and apply promotion code
  * @param {string} makhuyenmai - Promotion ID
  * @param {number} totalAmount - Total amount before discount
- * @returns {Promise<{valid: boolean, discount: number, message: string}>}
+ * @returns {Promise<{valid: boolean, discount: number, message: string, condition: number}>}
  */
 export async function validateAndApplyVoucher(makhuyenmai, totalAmount) {
   try {
@@ -80,16 +80,32 @@ export async function validateAndApplyVoucher(makhuyenmai, totalAmount) {
         valid: false,
         discount: 0,
         message: 'Mã khuyến mãi không hợp lệ hoặc đã hết hạn.',
+        condition: null,
       };
     }
 
     const voucher = results[0];
+    const minAmount = voucher.DIEUKIENAPDUNG || 0;
+    
+    // Check if total amount meets the minimum requirement
+    if (totalAmount < minAmount) {
+      return {
+        valid: false,
+        discount: 0,
+        message: `Đơn hàng không đủ điều kiện áp dụng. Yêu cầu tối thiểu: ${minAmount.toLocaleString('vi-VN')}đ`,
+        condition: minAmount,
+      };
+    }
+
+    // Calculate discount (don't exceed the total amount)
     const discount = Math.min(voucher.GIATRIGIAM, totalAmount);
 
     return {
       valid: true,
       discount,
-      message: `Áp dụng khuyến mãi "${voucher.TENCHUONGTRINH}" thành công. Giảm: ${discount}đ`,
+      message: `Áp dụng khuyến mãi "${voucher.TENCHUONGTRINH}" thành công. Giảm: ${discount.toLocaleString('vi-VN')}đ`,
+      condition: minAmount,
+      voucherName: voucher.TENCHUONGTRINH,
     };
   } catch (error) {
     console.error('Lỗi validateAndApplyVoucher:', error);
@@ -312,7 +328,7 @@ export async function releaseHeldSeats(datIds) {
 export async function createTransaction(bookingData) {
   let connection;
   try {
-    const { masuat, matk, seatIds, discount = 0, paymentMethod = 'Momo', totalAmount } = bookingData;
+    const { masuat, matk, seatIds, discount = 0, paymentMethod = 'Momo', totalAmount, makhuyenmai } = bookingData;
 
     connection = await getConnection();
 
@@ -331,10 +347,11 @@ export async function createTransaction(bookingData) {
     const updateGdQuery = `
       UPDATE GIAO_DICH 
       SET TONGTIEN = :tongtien,
-          MAKH = (SELECT MAKH FROM KHACH_HANG WHERE MATK = :matk)
+          MAKH = (SELECT MAKH FROM KHACH_HANG WHERE MATK = :matk),
+          MAKHUYENMAI = :makhuyenmai
       WHERE MAGD = :magd
     `;
-    await connection.execute(updateGdQuery, { tongtien: totalAmount, matk, magd });
+    await connection.execute(updateGdQuery, { tongtien: totalAmount, matk, magd, makhuyenmai });
     
     await connection.commit();
     await connection.close();

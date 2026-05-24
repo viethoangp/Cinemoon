@@ -54,6 +54,7 @@ export const CheckoutScreen = () => {
     grandTotal: 0,
   });
   const [roomSeats, setRoomSeats] = useState<ApiSeat[]>([]);
+  const [appliedVoucherInfo, setAppliedVoucherInfo] = useState<{code: string, name: string} | null>(null);
   
   // API Loading States
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
@@ -87,6 +88,14 @@ export const CheckoutScreen = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, bookingId, hasShownNotification]);
+
+  // Restore applied voucher from session storage on mount
+  useEffect(() => {
+    const savedVoucher = sessionStorage.getItem('appliedVoucher');
+    if (savedVoucher) {
+      setPromoCode(savedVoucher);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchSeatData = async () => {
@@ -209,21 +218,34 @@ export const CheckoutScreen = () => {
       const result = await bookingAPI.applyVoucher(code, priceData.ticketTotal);
       
       if (result.valid) {
-        const discount = Math.round(priceData.ticketTotal * (result.discountPercent || 0) / 100);
+        const discount = result.discount || 0;
         setPriceData(prev => ({
           ...prev,
           discount,
           grandTotal: prev.ticketTotal + prev.serviceFee - discount,
         }));
         
+        // Store applied voucher info
+        setAppliedVoucherInfo({
+          code: code,
+          name: result.voucherName || 'Khuyến mãi'
+        });
+        
         // Store applied voucher in session storage (for final checkout)
         sessionStorage.setItem('appliedVoucher', code);
+        
+        // Show success notification
+        addNotification?.(`✓ ${result.message}`, 'success', 3000);
       } else {
         setPromoError(result.message || 'Mã không hợp lệ hoặc đã hết hạn');
+        setAppliedVoucherInfo(null);
+        sessionStorage.removeItem('appliedVoucher');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Lỗi khi áp dụng mã khuyến mãi';
       setPromoError(message);
+      setAppliedVoucherInfo(null);
+      sessionStorage.removeItem('appliedVoucher');
     } finally {
       setIsApplyingVoucher(false);
     }
@@ -264,6 +286,8 @@ export const CheckoutScreen = () => {
         makhuyenmai: sessionStorage.getItem('appliedVoucher') || undefined,
         paymentMethod,
         totalAmount: priceData.grandTotal,
+        ticketTotal: priceData.ticketTotal,
+        voucherDiscount: priceData.discount,
       };
 
       // DEBUG: Log what we're sending
@@ -390,35 +414,65 @@ export const CheckoutScreen = () => {
               <Tag className="w-4 h-4 text-[#F5C518]" />
               Mã khuyến mãi
             </h3>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                placeholder="Nhập mã khuyến mãi"
-                value={promoCode}
-                onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }}
-                disabled={isApplyingVoucher}
-                className="flex-1 bg-[#252525] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-[#F5C518]/50 text-sm transition-colors disabled:opacity-50"
-              />
-              <button
-                onClick={handleApplyPromo}
-                disabled={isApplyingVoucher}
-                className="bg-[#F5C518] hover:bg-[#d4a906] disabled:bg-gray-600 text-black font-semibold px-5 py-3 rounded-lg text-sm transition-colors flex items-center gap-2"
-              >
-                {isApplyingVoucher && <Loader className="w-4 h-4 animate-spin" />}
-                Áp dụng
-              </button>
-            </div>
-            {priceData.discount > 0 && (
-              <div className="mt-3 flex items-center gap-2 text-green-400 text-sm">
-                <Check className="w-4 h-4" />
-                Áp dụng thành công! Giảm {formatCurrency(priceData.discount)}
+            
+            {appliedVoucherInfo ? (
+              <div className="space-y-3">
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Check className="w-5 h-5 text-green-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-green-400 font-semibold text-sm">{appliedVoucherInfo.name}</p>
+                      <p className="text-green-300 text-xs">Mã: {appliedVoucherInfo.code}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPromoCode('');
+                      setAppliedVoucherInfo(null);
+                      setPriceData(prev => ({
+                        ...prev,
+                        discount: 0,
+                        grandTotal: prev.ticketTotal + prev.serviceFee,
+                      }));
+                      sessionStorage.removeItem('appliedVoucher');
+                      setPromoError('');
+                    }}
+                    className="text-green-400 hover:text-green-300 text-xs px-3 py-1 rounded hover:bg-green-500/20 transition-colors"
+                  >
+                    Hủy
+                  </button>
+                </div>
+                <div className="text-green-400 text-sm font-semibold">
+                  💰 Giảm {formatCurrency(priceData.discount)}
+                </div>
               </div>
-            )}
-            {promoError && (
-              <div className="mt-3 flex items-center gap-2 text-[#E50914] text-sm">
-                <AlertCircle className="w-4 h-4" />
-                {promoError}
-              </div>
+            ) : (
+              <>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    placeholder="Nhập mã khuyến mãi"
+                    value={promoCode}
+                    onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }}
+                    disabled={isApplyingVoucher}
+                    className="flex-1 bg-[#252525] border border-[#333] rounded-lg px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-[#F5C518]/50 text-sm transition-colors disabled:opacity-50"
+                  />
+                  <button
+                    onClick={handleApplyPromo}
+                    disabled={isApplyingVoucher}
+                    className="bg-[#F5C518] hover:bg-[#d4a906] disabled:bg-gray-600 text-black font-semibold px-5 py-3 rounded-lg text-sm transition-colors flex items-center gap-2"
+                  >
+                    {isApplyingVoucher && <Loader className="w-4 h-4 animate-spin" />}
+                    Áp dụng
+                  </button>
+                </div>
+                {promoError && (
+                  <div className="mt-3 flex items-center gap-2 text-[#E50914] text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{promoError}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -478,9 +532,17 @@ export const CheckoutScreen = () => {
                 <span className="text-gray-300">{isLoadingPrice || isLoadingSeats ? '...' : formatCurrency(priceData.serviceFee)}</span>
               </div>
               {priceData.discount > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-green-400">Giảm giá</span>
-                  <span className="text-green-400">-{formatCurrency(priceData.discount)}</span>
+                <div className="space-y-1">
+                  <div className="flex justify-between bg-green-500/10 px-3 py-2 rounded-lg border border-green-500/20">
+                    <span className="text-green-400 font-semibold flex items-center gap-2">
+                      <Check className="w-4 h-4" />
+                      {appliedVoucherInfo?.name || 'Khuyến mãi'}
+                    </span>
+                    <span className="text-green-400 font-semibold">-{formatCurrency(priceData.discount)}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 px-3">
+                    Mã: {appliedVoucherInfo?.code}
+                  </div>
                 </div>
               )}
               <div className="h-px bg-[#2A2A2A] my-2" />
