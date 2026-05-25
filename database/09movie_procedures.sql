@@ -1,5 +1,5 @@
 -- ========================================
--- PHASE 2: Quản lý Phim - Đã được Senior FIX 100% chuẩn Schema
+-- Quản lý Phim 
 -- ========================================
 
 -- 1. LẤY DANH SÁCH PHIM (CÓ PHÂN TRANG & TÌM KIẾM)

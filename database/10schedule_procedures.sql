@@ -1,4 +1,4 @@
--- ================== PHASE 3: SCHEDULE (SUAT_CHIEU) ==================
+-- ================== SCHEDULE (SUAT_CHIEU) ==================
 
 /**
  * SP_GET_SUAT_CHIEU_LIST

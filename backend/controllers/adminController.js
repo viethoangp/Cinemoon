@@ -892,6 +892,19 @@ export const getMovies = async (req, res) => {
     // Get paginated movies
     const offset = (page - 1) * limit;
     const query = `
+      WITH ticket_alloc AS (
+        SELECT
+          v.MAGD,
+          sc.MAPHIM,
+          gd.TONGTIEN,
+          COUNT(*) OVER (PARTITION BY v.MAGD) AS TICKET_COUNT
+        FROM VE v
+        JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT
+        JOIN GIAO_DICH gd ON v.MAGD = gd.MAGD
+        WHERE gd.TRANGTHAIGD = 'Paid'
+          AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
+          AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
+      )
       SELECT 
         p.MAPHIM,
         p.TENPHIM,
@@ -904,15 +917,22 @@ export const getMovies = async (req, res) => {
         p.GIOIHANTUOI,
         p.TRANGTHAI,
         (SELECT COUNT(*) FROM SUAT_CHIEU sc WHERE sc.MAPHIM = p.MAPHIM) as SO_SUAT_CHIEU,
-        NVL((SELECT SUM(gd.TONGTIEN) FROM GIAO_DICH gd 
-             JOIN VE v ON gd.MAGD = v.MAGD 
-             JOIN SUAT_CHIEU sc ON v.MASUAT = sc.MASUAT 
-             WHERE sc.MAPHIM = p.MAPHIM AND gd.TRANGTHAIGD = 'Paid' 
-             AND EXTRACT(MONTH FROM gd.THOIGIANTAO) = EXTRACT(MONTH FROM SYSDATE)
-             AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)), 0) as DOANHTHU_THANG
+        COALESCE(ROUND(SUM(ta.TONGTIEN / ta.TICKET_COUNT), 2), 0) as DOANHTHU_THANG
       FROM PHIM p
+      LEFT JOIN ticket_alloc ta ON ta.MAPHIM = p.MAPHIM
       WHERE UPPER(p.TENPHIM) LIKE UPPER('%' || NVL(:search, '') || '%')
          OR UPPER(p.DAODIEN) LIKE UPPER('%' || NVL(:search, '') || '%')
+      GROUP BY 
+        p.MAPHIM,
+        p.TENPHIM,
+        p.MOTA,
+        p.THOILUONG,
+        p.NGAYPHATHANH,
+        p.POSTER,
+        p.THELOAI,
+        p.DAODIEN,
+        p.GIOIHANTUOI,
+        p.TRANGTHAI
       ORDER BY p.MAPHIM DESC
       OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     `;

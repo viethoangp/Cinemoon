@@ -1,4 +1,4 @@
--- ================== PHASE 4: VOUCHER (KHUYEN_MAI) ==================
+-- ================== VOUCHER (KHUYEN_MAI) ==================
 
 /**
  * SP_GET_KHUYEN_MAI_LIST

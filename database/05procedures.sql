@@ -321,7 +321,6 @@ BEGIN
         INSERT INTO DAT_CHO (MASUAT, MAGHE, MAGD, THOIGIANGIU, GIUDEN, TRANGTHAICHO)
         VALUES (p_MaSuat, p_MaGhe, p_MaGD, SYSDATE, SYSDATE + INTERVAL '10' MINUTE, 'Held');
     END IF;
-
     -- 4. THÀNH CÔNG VÀ NHẢ KHÓA
     p_KetQua := 1;
     p_Loi := 'Giữ ghế thành công.';
@@ -383,7 +382,6 @@ BEGIN
     IF CURRENT_TIMESTAMP NOT BETWEEN v_NgayBD AND v_NgayKT THEN
         p_KetQua := 0; p_Loi := 'Mã khuyến mãi chưa có hiệu lực hoặc đã hết hạn.'; RETURN;
     END IF;
-
     -- Gọi Function thay vì JOIN để tránh nhân bản tiền
     SELECT NVL(SUM(FN_TINH_GIA_VE(d.MASUAT, d.MAGHE, g.MAKH)), 0) INTO v_TongTienGoc
     FROM DAT_CHO d
@@ -582,10 +580,8 @@ BEGIN
     WHERE GIUDEN < CURRENT_TIMESTAMP AND TRANGTHAICHO = 'Held';
 
     p_SoGheHuy := SQL%ROWCOUNT;
-
     -- (Tùy chọn) 2. Có thể update luôn các Giao dịch có chứa ghế bị Timeout thành Cancelled
     -- Để đơn giản hóa cho sinh viên, tạm thời chỉ quản lý Timeout ở mức độ Ghế (DAT_CHO).
-    
     p_KetQua := 1;
     p_Loi := 'Quét timeout thành công. Đã hủy ' || p_SoGheHuy || ' ghế.';
     COMMIT;

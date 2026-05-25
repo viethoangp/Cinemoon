@@ -1,10 +1,5 @@
 -- ============================================================================
 -- ANNUAL DASHBOARD PROCEDURES & QUERIES
--- File: 08annual_dashboard_procedures.sql
--- Purpose: Year-to-date analytics for AdminScreen Phase 1
--- Database: Oracle 11g+
--- Author: Tech Lead
--- Date: 2026-05-19
 -- ============================================================================
 
 -- ============================================================================
@@ -25,6 +20,7 @@ CREATE OR REPLACE PROCEDURE SP_GET_ANNUAL_STATS (
   p_Loi OUT VARCHAR2
 ) IS
 BEGIN
+  EXECUTE IMMEDIATE 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE';
   -- Calculate annual revenue (sum of all paid transactions in current year)
   SELECT NVL(SUM(gd.TONGTIEN), 0) INTO p_AnnualRevenue
   FROM GIAO_DICH gd
@@ -57,33 +53,17 @@ EXCEPTION
 END SP_GET_ANNUAL_STATS;
 /
 
--- ============================================================================
--- QUERY: Monthly Revenue Breakdown (12 Months)
--- Purpose: Revenue trend for line chart visualization
--- Returns: Month (1-12) and revenue for each month in current year
--- Note: This query should be executed in backend, not stored
--- ============================================================================
--- SELECT 
---   EXTRACT(MONTH FROM gd.THOIGIANTAO) as thang,
---   SUM(gd.TONGTIEN) as doanhthu
--- FROM GIAO_DICH gd
--- WHERE gd.TRANGTHAIGD = 'Paid'
---   AND EXTRACT(YEAR FROM gd.THOIGIANTAO) = EXTRACT(YEAR FROM SYSDATE)
--- GROUP BY EXTRACT(MONTH FROM gd.THOIGIANTAO)
--- ORDER BY thang ASC
--- FETCH FIRST 12 ROWS ONLY;
-
--- ============================================================================
 -- PROCEDURE: SP_GET_MONTHLY_REVENUE
--- Purpose: Get monthly revenue breakdown for current year (alternative to raw query)
--- Returns: RefCursor with month and revenue columns
+-- Purpose: Get monthly revenue breakdown for current year 
 -- ============================================================================
+
 CREATE OR REPLACE PROCEDURE SP_GET_MONTHLY_REVENUE (
   p_cursor OUT SYS_REFCURSOR,
   p_KetQua OUT NUMBER,
   p_Loi OUT VARCHAR2
 ) IS
 BEGIN
+  EXECUTE IMMEDIATE 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE';
   OPEN p_cursor FOR
     SELECT 
       EXTRACT(MONTH FROM gd.THOIGIANTAO) as thang,
@@ -105,4 +85,4 @@ EXCEPTION
 END SP_GET_MONTHLY_REVENUE;
 /
 
-COMMIT;
+
